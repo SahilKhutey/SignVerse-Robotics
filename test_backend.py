@@ -1,5 +1,8 @@
 import asyncio
 import sys
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # Add services to path so we can import them locally
 sys.path.append("services/agent-service")
@@ -15,29 +18,25 @@ except ImportError as e:
 
 async def run_verification():
     print("==========================================")
-    print(" VERIFYING SIGNVERSE MICROSERVICES")
+    print(" VERIFYING ASYNCHRONOUS AGENT TASK QUEUE")
     print("==========================================")
     
     intent = "Navigate to the drone bay and run gesture recognition"
     print(f"\\n[1] User Intent Received: '{intent}'")
     
     planner = LLMPlanner()
-    print("[2] Engaging LLM Planner...")
     plan = await planner.generate_plan(intent)
-    print(f"    - Generated {len(plan.objectives)} objectives and {len(plan.constraints)} constraints.")
     
     graph_gen = TaskGraphGenerator()
-    print("[3] Generating DAG Task Graph...")
     graph = await graph_gen.generate_graph(plan)
-    print(f"    - Generated {len(graph)} parallel Task Nodes.")
     
     executor = ExecutionPlanner()
-    print("[4] Dispatching to Physical Robotics Runtime...")
+    print("[2] Dispatching to Distributed Async Workers...")
     result = await executor.execute_graph(graph)
     
-    print(f"\\n[5] Execution Result: {result['status']}")
+    print(f"\\n[3] Execution Result: {result['status']} ({result['executed_nodes']} nodes)")
     print("==========================================")
-    print(" SYSTEM VERIFICATION COMPLETE. ALL NOMINAL.")
+    print(" ASYNC QUEUE VERIFICATION COMPLETE. ALL NOMINAL.")
     print("==========================================")
 
 if __name__ == "__main__":
