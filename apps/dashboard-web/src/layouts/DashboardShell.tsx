@@ -1,131 +1,99 @@
-'use client'
-import React, { useState } from 'react';
-import { Activity, Cpu, Camera, Terminal, Shield, Workflow } from 'lucide-react';
-import { motion } from 'framer-motion';
+'use client';
+import React from 'react';
+import { Activity, ShieldAlert, Cpu } from 'lucide-react';
+import { useRealtimeStream } from 'api-contracts';
 
-export default function DashboardShell() {
-  const [activeTab, setActiveTab] = useState('telemetry');
+export function DashboardShell() {
+  const aiStream = useRealtimeStream('ws://localhost:8001/inference');
+  const robStream = useRealtimeStream('ws://localhost:8002/robotics');
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#0A0A0A]">
-      {/* Sidebar */}
-      <div className="w-64 bg-[#111111] border-r border-[#222] p-4 flex flex-col">
-        <div className="text-xl font-bold tracking-widest text-emerald-400 mb-10 flex items-center gap-2">
-          <Activity /> SIGN-VERSE
+    <div className="flex h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
+      {/* Sidebar Navigation */}
+      <nav className="w-64 border-r border-neutral-800 bg-neutral-900/50 flex flex-col">
+        <div className="p-6 border-b border-neutral-800">
+          <h1 className="text-xl font-black tracking-tighter text-emerald-500">SIGN-VERSE</h1>
+          <p className="text-xs text-neutral-500 uppercase tracking-widest mt-1">Command Center</p>
         </div>
-        
-        <nav className="flex-1 space-y-2">
-          {[
-            { id: 'telemetry', icon: <Activity size={18}/>, label: 'Fleet Telemetry' },
-            { id: 'perception', icon: <Camera size={18}/>, label: 'Perception Stream' },
-            { id: 'agentic', icon: <Workflow size={18}/>, label: 'Agentic Core' },
-            { id: 'security', icon: <Shield size={18}/>, label: 'Enterprise Auth' },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-all duration-200 ${
-                activeTab === item.id 
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                : 'text-gray-400 hover:bg-[#1A1A1A] hover:text-white'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        <div className="pt-4 border-t border-[#222]">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            SYSTEM ONLINE
+        <div className="p-4 flex-1 space-y-2">
+          <div className="flex items-center gap-3 px-4 py-3 bg-neutral-800/50 rounded-lg text-emerald-400 border border-emerald-900/50 cursor-pointer">
+            <Activity size={18} />
+            <span className="text-sm font-semibold">Live Telemetry</span>
           </div>
         </div>
-      </div>
+        
+        {/* Real-time SDK Status */}
+        <div className="p-6 border-t border-neutral-800 space-y-4">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-neutral-400">AI GATEWAY</span>
+            <span className={aiStream.isConnected ? "text-emerald-500" : "text-red-500"}>
+              {aiStream.isConnected ? "ONLINE" : "OFFLINE"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-neutral-400">ROBOT BUS</span>
+            <span className={robStream.isConnected ? "text-emerald-500" : "text-red-500"}>
+              {robStream.isConnected ? "ONLINE" : "OFFLINE"}
+            </span>
+          </div>
+        </div>
+      </nav>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
-        {/* Top Header */}
-        <header className="h-16 border-b border-[#222] flex items-center px-6 justify-between bg-[#0F0F0F]">
-          <h1 className="text-lg font-medium text-gray-200 capitalize">{activeTab} Monitor</h1>
-          <div className="flex gap-4">
-            <div className="px-3 py-1 rounded bg-[#1A1A1A] border border-[#333] flex items-center gap-2 text-xs text-emerald-400">
-              <Cpu size={14} /> GPU Load: 42%
-            </div>
-            <div className="px-3 py-1 rounded bg-[#1A1A1A] border border-[#333] flex items-center gap-2 text-xs text-blue-400">
-              <Terminal size={14} /> Agents: 3
+      <main className="flex-1 flex flex-col relative">
+        <header className="h-16 border-b border-neutral-800 flex items-center justify-between px-6 bg-neutral-900/20 backdrop-blur-md">
+          <div className="flex items-center gap-4">
+            <div className="px-3 py-1 bg-neutral-800 rounded-full text-xs font-mono border border-neutral-700 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              {aiStream.data ? `Gesture: ${aiStream.data.gesture}` : "AWAITING SIGNAL"}
             </div>
           </div>
         </header>
-
-        {/* Dashboard Grid */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="grid grid-cols-12 gap-6 h-full">
-            
-            {/* Main Viewport */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="col-span-8 bg-[#111] rounded-xl border border-[#222] overflow-hidden flex flex-col"
-            >
-              <div className="h-10 bg-[#151515] border-b border-[#222] px-4 flex items-center text-xs text-gray-400 font-mono">
-                [ viewport: /api/v1/stream ]
+        
+        <div className="flex-1 p-6 grid grid-cols-12 gap-6">
+          <div className="col-span-8 bg-neutral-900 border border-neutral-800 rounded-xl flex items-center justify-center relative overflow-hidden">
+            <div className="absolute top-4 left-4 flex gap-2">
+              <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded border border-neutral-800 text-xs font-mono text-neutral-400">
+                CAM_01 [RGB_DEPTH]
               </div>
-              <div className="flex-1 flex items-center justify-center relative">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1A1A1A] to-[#111]"></div>
-                <div className="text-emerald-500/20 font-mono text-6xl tracking-tighter">
-                  NO SIGNAL
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Sidebar Widgets */}
-            <div className="col-span-4 flex flex-col gap-6">
-              
-              <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-[#111] rounded-xl border border-[#222] p-5 flex-1"
-              >
-                <h3 className="text-sm font-medium text-gray-400 mb-4 flex items-center gap-2">
-                  <Terminal size={14}/> LLM Task Graph
-                </h3>
-                <div className="space-y-3 font-mono text-xs">
-                  <div className="flex justify-between items-center bg-[#1A1A1A] p-2 rounded">
-                    <span className="text-blue-400">task_1</span>
-                    <span className="text-emerald-400">completed</span>
-                  </div>
-                  <div className="flex justify-between items-center bg-[#1A1A1A] p-2 rounded border border-emerald-500/30">
-                    <span className="text-blue-400">task_2</span>
-                    <span className="text-amber-400 animate-pulse">executing</span>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div 
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-[#111] rounded-xl border border-[#222] p-5 h-48"
-              >
-                 <h3 className="text-sm font-medium text-gray-400 mb-4 flex items-center gap-2">
-                  <Activity size={14}/> System Load
-                </h3>
-                <div className="w-full h-2 bg-[#222] rounded-full overflow-hidden mb-2">
-                  <div className="h-full bg-emerald-500 w-[42%]"></div>
-                </div>
-                <div className="w-full h-2 bg-[#222] rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 w-[78%]"></div>
-                </div>
-              </motion.div>
-
             </div>
-
+            
+            {/* Real SDK Vision Output */}
+            {aiStream.data ? (
+                <div className="w-full h-full flex items-center justify-center border-4 border-emerald-900/30 text-emerald-500 font-mono">
+                    [LIVE VISION INGESTION ACTIVE] <br/>
+                    BBox: {JSON.stringify(aiStream.data.bounding_boxes)}
+                </div>
+            ) : (
+                <div className="text-neutral-600 font-mono tracking-widest flex items-center gap-3">
+                  <ShieldAlert size={20} />
+                  NO SIGNAL DETECTED
+                </div>
+            )}
+          </div>
+          
+          <div className="col-span-4 space-y-6">
+            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                  <Cpu size={16} className="text-emerald-500" />
+                  Robotics Kinematics
+                </h3>
+              </div>
+              <div className="space-y-3 font-mono text-xs">
+                <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
+                  <span className="text-neutral-500">JOINT 0 (Base)</span>
+                  <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J0.toFixed(2) : "0.00"}°</span>
+                </div>
+                <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
+                  <span className="text-neutral-500">JOINT 1 (Shoulder)</span>
+                  <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J1.toFixed(2) : "0.00"}°</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

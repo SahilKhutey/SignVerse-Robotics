@@ -1,9 +1,8 @@
 {
-  "name": "@signverse/api-contracts",
-  "version": "0.0.0",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "name": "api-contracts",
+  "version": "1.0.0",
+  "main": "src/index.ts",
   "dependencies": {
-    "zod": "^3.22.4"
+    "react": "^18.3.1"
   }
 }
