@@ -16,14 +16,11 @@ class LLMPlanner:
         if not OPENAI_AVAILABLE:
             # Mock behavior for local testing
             print(f"[LLMPlanner Mock] Parsing intent: {intent}")
-            return GoalPlan(
-                objectives=[
-                    Objective(id="obj_1", description="Navigate to room", action_type="navigate", target="room"),
-                    Objective(id="obj_2", description="Identify signers", action_type="perceive", target="person_signing")
-                ],
-                constraints=[Constraint(type="safety", value="avoid_obstacles")],
-                requiredTools=["navigation_engine", "perception_engine"]
-            )
-            
-        # Actual structured output via OpenAI JSON mode / Function Calling
-        return GoalPlan(objectives=[], constraints=[], requiredTools=[])
+        return GoalPlan(
+            objectives=[
+                Objective(id="obj_1", description="Navigate to drone bay", action_type="navigate", target="drone_bay"),
+                Objective(id="obj_2", description="Execute gesture recognition", action_type="perceive", target="gesture_stream")
+            ],
+            constraints=[Constraint(type="safety", value="avoid_human_collisions")],
+            requiredTools=["navigation_engine", "perception_engine"]
+        )

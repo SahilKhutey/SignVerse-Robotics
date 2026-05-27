@@ -1,40 +1,66 @@
-'use client';
-import React, { useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
-import { Physics } from '@react-three/rapier';
-import { TwinSynchronizer } from '@signverse/simulation-engine';
+'use client'
+import React, { useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Grid, Environment } from '@react-three/drei';
+import * as THREE from 'three';
 
-const synchronizer = new TwinSynchronizer();
-
-export function DigitalTwinViewport() {
+// Placeholder Robot Arm Mesh
+function RobotArmPlaceholder() {
+  const baseRef = useRef<THREE.Mesh>(null);
   
-  useEffect(() => {
-    // Mock Telemetry Ingestion Loop
-    const interval = setInterval(() => {
-      synchronizer.updateRobotState({
-        robotId: 'sim_robot_001',
-        position: [Math.sin(Date.now()/1000) * 2, 0.5, Math.cos(Date.now()/1000) * 2],
-        rotation: [0, 0, 0, 1]
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, []);
+  useFrame((state) => {
+    if (baseRef.current) {
+      // Simulate telemetry driven movement
+      baseRef.current.rotation.y = Math.sin(state.clock.elapsedTime) * 0.5;
+    }
+  });
 
   return (
-    <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
-      <color attach="background" args={['#1a1a1a']} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[10, 10, 10]} intensity={1} />
-      <Grid infiniteGrid fadeDistance={20} cellColor="#444" sectionColor="#888" />
-      <Physics>
-         {/* ECS Entities will be rendered here via Miniplex React bindings in Sprint 2 */}
-         <mesh position={[0, 0.5, 0]}>
-           <boxGeometry args={[1, 1, 1]} />
-           <meshStandardMaterial color="hotpink" />
-         </mesh>
-      </Physics>
-      <OrbitControls makeDefault />
-    </Canvas>
+    <group ref={baseRef}>
+      {/* Base */}
+      <mesh position={[0, 0.5, 0]}>
+        <cylinderGeometry args={[1, 1, 1, 32]} />
+        <meshStandardMaterial color="#333" metalness={0.8} roughness={0.2} />
+      </mesh>
+      {/* Joint 1 */}
+      <mesh position={[0, 2, 0]}>
+        <boxGeometry args={[0.5, 3, 0.5]} />
+        <meshStandardMaterial color="#4ade80" metalness={0.5} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+export default function DigitalTwinViewport() {
+  return (
+    <div className="w-full h-full absolute inset-0">
+      <Canvas camera={{ position: [5, 5, 5], fov: 50 }}>
+        <color attach="background" args={['#050505']} />
+        
+        <ambientLight intensity={0.2} />
+        <directionalLight position={[10, 10, 5]} intensity={1} />
+        <Environment preset="city" />
+
+        <Grid 
+          infiniteGrid 
+          fadeDistance={20} 
+          sectionColor="#222" 
+          cellColor="#111" 
+        />
+        
+        <RobotArmPlaceholder />
+        
+        <OrbitControls makeDefault />
+      </Canvas>
+      
+      {/* Telemetry HUD Overlay */}
+      <div className="absolute top-4 left-4 p-4 bg-black/80 border border-[#333] rounded-lg font-mono text-xs pointer-events-none">
+        <h3 className="text-emerald-400 mb-2 font-bold tracking-wider">ROS2 KINEMATICS</h3>
+        <div className="text-gray-400">J0: 45.2°</div>
+        <div className="text-gray-400">J1: -12.1°</div>
+        <div className="text-gray-400">J2: 88.0°</div>
+        <div className="mt-2 text-blue-400 animate-pulse">SYNC: ACTIVE</div>
+      </div>
+    </div>
   );
 }

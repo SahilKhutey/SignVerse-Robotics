@@ -1,9 +1,9 @@
-import MissionControlWorkspace from "@/workspaces/MissionControlWorkspace";
+import DashboardShell from '../layouts/DashboardShell'
 
-export default function Home() {
+export default function Page() {
   return (
-    <main className="h-full w-full">
-      <MissionControlWorkspace />
+    <main className="min-h-screen bg-[#0A0A0A] text-white">
+      <DashboardShell />
     </main>
-  );
+  )
 }
