@@ -1,27 +1,39 @@
+import logging
+import numpy as np
+
+logger = logging.getLogger(__name__)
+
 try:
     import onnxruntime as ort
     ONNX_AVAILABLE = True
 except ImportError:
     ONNX_AVAILABLE = False
-import numpy as np
 
 class EdgeInferenceEngine:
-    def __init__(self, model_path: str = "models/model.onnx"):
-        self.session = None
+    """
+    Executes lightweight INT8/FP16 models locally on ARM64 devices (Jetson, RPi)
+    to minimize cloud bandwidth and latency.
+    """
+    def __init__(self, model_path: str = "models/yolov8n-pose.onnx"):
+        self.model_path = model_path
         if ONNX_AVAILABLE:
             try:
-                # Fallback to CPU if TensorRT/CUDA unavailable on edge
-                self.session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-                print(f"[EdgeInference] Loaded ONNX model: {model_path}")
+                # Prioritize TensorRT or CUDA execution providers if available on edge
+                self.session = ort.InferenceSession(self.model_path, providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider'])
+                self.input_name = self.session.get_inputs()[0].name
+                logger.info(f"Loaded ONNX model at edge: {model_path}")
             except Exception as e:
-                print(f"[EdgeInference] Could not load model (Expected if file missing): {e}")
+                logger.warning(f"Failed to load ONNX model: {e}")
+                self.session = None
+        else:
+            logger.warning("onnxruntime not installed. Edge inference running in MOCK mode.")
 
-    def infer(self, input_data: np.ndarray) -> dict:
-        if not ONNX_AVAILABLE or not self.session:
-            # Mock inference
-            return {"status": "mock_inference", "boxes": []}
+    def predict(self, image_array: np.ndarray) -> dict:
+        if ONNX_AVAILABLE and hasattr(self, 'session') and self.session:
+            # Expected preprocess: Resize, normalize
+            input_tensor = image_array.astype(np.float32) 
+            outputs = self.session.run(None, {self.input_name: input_tensor})
+            return {"status": "success", "raw_output": outputs}
             
-        input_name = self.session.get_inputs()[0].name
-        output_name = self.session.get_outputs()[0].name
-        result = self.session.run([output_name], {input_name: input_data})
-        return {"status": "success", "data": result[0].tolist()}
+        # Mock edge processing
+        return {"status": "mock", "bounding_boxes": [[12, 12, 45, 45]], "latency_ms": 14.2}
