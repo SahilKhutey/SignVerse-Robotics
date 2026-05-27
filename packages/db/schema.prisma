@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("researcher") // admin, researcher, edge_node
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  apiKeys   ApiKey[]
+}
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  keyHash   String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model Robot {
+  id             String   @id @default(uuid())
+  macAddress     String   @unique
+  firmwareVersion String
+  status         String   @default("OFFLINE")
+  createdAt      DateTime @default(now())
+  
+  telemetryLogs  TelemetryLog[]
+}
+
+model TelemetryLog {
+  id        String   @id @default(uuid())
+  robotId   String
+  robot     Robot    @relation(fields: [robotId], references: [id])
+  timestamp DateTime @default(now())
+  
+  // Stored as JSONB containing joint kinematics J0-J6
+  jointState Json
+  
+  // Optional linkage to video inference datasets
+  datasetId String?
+  dataset   Dataset? @relation(fields: [datasetId], references: [id])
+}
+
+model Dataset {
+  id            String   @id @default(uuid())
+  s3Uri         String
+  qdrantVectorId String?
+  labels        Json?
+  createdAt     DateTime @default(now())
+  
+  telemetryLogs TelemetryLog[]
+}
