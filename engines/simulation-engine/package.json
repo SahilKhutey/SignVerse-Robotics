@@ -1,0 +1,10 @@
+{
+  "name": "@signverse/simulation-engine",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "private": true,
+  "dependencies": {
+    "miniplex": "^3.0.0",
+    "three": "^0.164.0"
+  }
+}

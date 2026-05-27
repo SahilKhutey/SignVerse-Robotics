@@ -1,0 +1,12 @@
+{
+  "name": "xr-overlay",
+  "version": "1.0.0",
+  "description": "AR/VR Telemetry Overlay (WebXR)",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "@react-three/fiber": "^8.16.0",
+    "@react-three/xr": "^5.7.1",
+    "three": "^0.160.0"
+  }
+}

@@ -1,15 +1,17 @@
 {
   "name": "sign-verse-robotics",
-  "version": "1.0.0",
-  "description": "Sign-Verse Robotics Platform",
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "test": "turbo run test"
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint"
   },
   "devDependencies": {
-    "turbo": "latest"
-  }
+    "turbo": "^1.13.0",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@8.15.6"
 }

@@ -1,0 +1,6 @@
+{
+  "name": "agent-service",
+  "version": "1.0.0",
+  "description": "Embodied AI Cognitive Runtime",
+  "private": true
+}

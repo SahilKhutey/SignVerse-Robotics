@@ -1,0 +1,6 @@
+{
+  "name": "robotics-service",
+  "version": "1.0.0",
+  "description": "Robotics Runtime Layer",
+  "private": true
+}

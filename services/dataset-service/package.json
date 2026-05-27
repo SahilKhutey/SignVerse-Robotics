@@ -1,0 +1,6 @@
+{
+  "name": "dataset-service",
+  "version": "1.0.0",
+  "description": "AI Dataset Operating System",
+  "private": true
+}

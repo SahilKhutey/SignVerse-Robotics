@@ -1,0 +1,8 @@
+{
+  "name": "ai-control-center",
+  "private": true,
+  "dependencies": {
+    "@signverse/ui": "workspace:*",
+    "@signverse/ai-sdk": "workspace:*"
+  }
+}

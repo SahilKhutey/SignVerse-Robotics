@@ -1,0 +1,6 @@
+{
+  "name": "inference-service",
+  "version": "1.0.0",
+  "description": "AI Runtime Gateway",
+  "private": true
+}

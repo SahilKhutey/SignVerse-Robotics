@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@signverse/ui/*": [
+        "packages/ui/src/*"
+      ],
+      "@signverse/types/*": [
+        "packages/types/src/*"
+      ],
+      "@signverse/state/*": [
+        "packages/state/src/*"
+      ],
+      "@signverse/api-contracts/*": [
+        "packages/api-contracts/src/*"
+      ],
+      "@signverse/config/*": [
+        "packages/config/src/*"
+      ],
+      "@signverse/sdk/*": [
+        "sdk/core/src/*"
+      ]
+    }
+  }
+}

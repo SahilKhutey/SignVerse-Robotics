@@ -1,0 +1,18 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - name: robotics-service
+    url: http://robotics-service:8001
+    routes:
+      - name: robotics-route
+        paths:
+          - /api/v1/robotics
+    plugins:
+      - name: key-auth
+  - name: inference-service
+    url: http://inference-service:8000
+    routes:
+      - name: inference-route
+        paths:
+          - /api/v1/inference

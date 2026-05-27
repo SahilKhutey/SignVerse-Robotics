@@ -1,0 +1,6 @@
+{
+  "name": "edge-runtime",
+  "version": "1.0.0",
+  "description": "Edge AI Robotics Runtime",
+  "private": true
+}
