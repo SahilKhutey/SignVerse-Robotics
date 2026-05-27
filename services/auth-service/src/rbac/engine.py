@@ -1,38 +1,29 @@
-from pydantic import BaseModel
-from typing import List, Dict
+import logging
+from typing import List
 
-class Permission(BaseModel):
-    resource: str
-    actions: List[str]
+logger = logging.getLogger(__name__)
 
-class Role(BaseModel):
-    id: str
-    permissions: List[Permission]
+# Enterprise Zero-Trust Roles
+ROLE_PERMISSIONS = {
+    "admin": ["*"],
+    "researcher": ["read:telemetry", "execute:inference", "read:datasets"],
+    "edge_node": ["write:telemetry", "execute:inference"]
+}
 
 class RBACEngine:
-    def __init__(self):
-        # Hardcoded for Sprint 1, would be DB-backed
-        self.roles = {
-            "robotics-operator": Role(
-                id="robotics-operator",
-                permissions=[
-                    Permission(resource="robotics:movement", actions=["execute", "read"]),
-                    Permission(resource="telemetry", actions=["read"])
-                ]
-            ),
-            "observer": Role(
-                id="observer",
-                permissions=[
-                    Permission(resource="telemetry", actions=["read"])
-                ]
-            )
-        }
-
-    def get_role(self, role_id: str) -> Role:
-        return self.roles.get(role_id, Role(id="guest", permissions=[]))
-
-    def validate_access(self, role: Role, resource: str, action: str) -> bool:
-        for perm in role.permissions:
-            if perm.resource == resource and (action in perm.actions or "*" in perm.actions):
-                return True
+    @staticmethod
+    def check_permission(user_role: str, required_scope: str) -> bool:
+        if user_role not in ROLE_PERMISSIONS:
+            logger.warning(f"Access Denied: Unknown role {user_role}")
+            return False
+            
+        allowed_scopes = ROLE_PERMISSIONS[user_role]
+        if "*" in allowed_scopes:
+            return True
+            
+        if required_scope in allowed_scopes:
+            logger.debug(f"Access Granted: Role {user_role} has scope {required_scope}")
+            return True
+            
+        logger.warning(f"Access Denied: Role {user_role} lacks scope {required_scope}")
         return False
