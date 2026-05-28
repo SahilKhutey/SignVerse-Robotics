@@ -1,0 +1,111 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: signverse-routing
+  namespace: signverse
+spec:
+  hosts:
+    - "api.signverse.ai"
+  gateways:
+    - signverse-gateway
+  http:
+    # API v1 routing
+    - match:
+        - uri:
+            prefix: /v1/ai
+      route:
+        - destination:
+            host: signverse-ai-inference
+            port:
+              number: 3003
+          weight: 100
+
+    - match:
+        - uri:
+            prefix: /v1/
+      route:
+        - destination:
+            host: signverse-api-gateway
+            port:
+              number: 80
+          weight: 100
+
+    # WebSocket routing for realtime telemetry
+    - match:
+        - uri:
+            prefix: /ws/
+      route:
+        - destination:
+            host: signverse-api-gateway
+            port:
+              number: 80
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: signverse-mtls
+  namespace: signverse
+spec:
+  host: "*.signverse.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL   # Full mTLS between all services
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+      http:
+        http2MaxRequests: 10000
+        maxRequestsPerConnection: 100
+    outlierDetection:
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: signverse-gateway
+  namespace: signverse
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: signverse-tls-cert
+      hosts:
+        - "api.signverse.ai"
+        - "dashboard.signverse.ai"
+---
+# Rate limiting via Istio EnvoyFilter
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: signverse-rate-limit
+  namespace: signverse
+spec:
+  workloadSelector:
+    labels:
+      app: api-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.local_ratelimit
+          typed_config:
+            "@type": type.googleapis.com/udpa.type.v1.TypedStruct
+            type_url: type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+            value:
+              stat_prefix: signverse_rate_limit
+              token_bucket:
+                max_tokens: 1000
+                tokens_per_fill: 1000
+                fill_interval: 1s

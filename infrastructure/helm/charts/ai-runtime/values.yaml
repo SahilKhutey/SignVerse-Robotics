@@ -1,0 +1,95 @@
+# AI Runtime Helm Values — GPU-Accelerated Inference Stack
+aiInference:
+  enabled: true
+  image:
+    repository: signverse/ai-inference
+    tag: latest-cuda12
+  replicaCount: 2
+  gpu:
+    enabled: true
+    count: 1
+    driver: nvidia
+  precision: "fp16"
+  tensorrt:
+    enabled: true
+    workspaceMb: 4096
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+      nvidia.com/gpu: "1"
+  models:
+    storage:
+      size: "100Gi"
+      storageClass: "fast-ssd"
+  env:
+    QDRANT_URL: "http://qdrant:6333"
+    NATS_URL: "nats://nats:4222"
+    MAX_BATCH_SIZE: "8"
+    TARGET_LATENCY_MS: "50"
+
+visionPipeline:
+  enabled: true
+  image:
+    repository: signverse/vision-pipeline
+    tag: latest
+  replicaCount: 1
+  gpu:
+    enabled: true
+    count: 1
+  models:
+    yolo: "yolov11n.onnx"
+    mediapipe: "hand_landmark.onnx"
+    movenet: "movenet_lightning.onnx"
+  resources:
+    requests:
+      nvidia.com/gpu: "1"
+    limits:
+      nvidia.com/gpu: "1"
+
+gestureEngine:
+  enabled: true
+  image:
+    repository: signverse/gesture-engine
+    tag: latest
+  replicaCount: 1
+  translation:
+    streaming: true
+    multilingualOutput: true
+    languages: ["en", "asl", "bsl"]
+
+memoryService:
+  enabled: true
+  image:
+    repository: signverse/memory-service
+    tag: latest
+  replicaCount: 1
+  qdrant:
+    host: qdrant
+    port: 6333
+    collectionName: "signverse_memory"
+  langraph:
+    enabled: true
+    maxMemoryNodes: 10000
+
+modelRegistry:
+  enabled: true
+  image:
+    repository: signverse/model-registry
+    tag: latest
+  storage:
+    size: "200Gi"
+  benchmarking:
+    enabled: true
+    targets:
+      fps: 30
+      latencyMs: 50
+      memoryMb: 4096

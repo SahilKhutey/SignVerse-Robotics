@@ -1,0 +1,121 @@
+# SignVerse AI Inference Service — Kubernetes GPU Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signverse-ai-inference
+  namespace: signverse
+  labels:
+    app: ai-inference
+    tier: ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-inference
+  template:
+    metadata:
+      labels:
+        app: ai-inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        sidecar.istio.io/inject: "true"
+    spec:
+      # GPU node scheduling
+      nodeSelector:
+        accelerator: nvidia-gpu
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: ai-inference
+          image: signverse/ai-inference:latest
+          ports:
+            - containerPort: 3003
+              name: grpc
+            - containerPort: 9464
+              name: metrics
+          env:
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0"
+            - name: MODEL_PRECISION
+              value: "fp16"
+            - name: TENSORRT_ENABLED
+              value: "true"
+            - name: MAX_BATCH_SIZE
+              value: "8"
+            - name: QDRANT_URL
+              value: "http://qdrant:6333"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+          resources:
+            requests:
+              cpu: "2000m"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: signverse-models-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signverse-ai-inference
+  namespace: signverse
+spec:
+  selector:
+    app: ai-inference
+  ports:
+    - name: grpc
+      port: 3003
+      targetPort: 3003
+  type: ClusterIP
+---
+# GPU-aware HPA using custom metrics (GPU utilization)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-inference-hpa
+  namespace: signverse
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: signverse-ai-inference
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: signverse-models-pvc
+  namespace: signverse
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd

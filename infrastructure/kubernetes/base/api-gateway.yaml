@@ -1,0 +1,115 @@
+# SignVerse API Gateway — Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signverse-api-gateway
+  namespace: signverse
+  labels:
+    app: api-gateway
+    tier: backend
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: api-gateway
+          image: signverse/api-gateway:latest
+          ports:
+            - containerPort: 3000
+              name: http
+            - containerPort: 9464
+              name: metrics
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: signverse-db-secret
+                  key: url
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: signverse-auth-secret
+                  key: jwt_secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: signverse-api-gateway
+  namespace: signverse
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+    - name: metrics
+      port: 9464
+      targetPort: 9464
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: signverse
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: signverse-api-gateway
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

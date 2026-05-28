@@ -1,0 +1,120 @@
+# Default values for signverse-backend Helm chart
+# Override with: helm install -f custom-values.yaml
+
+global:
+  imageRegistry: "ghcr.io/signverse"
+  imagePullPolicy: Always
+  namespace: signverse
+
+# ─── API Gateway ─────────────────────────────────────────────────────────────
+apiGateway:
+  enabled: true
+  image:
+    repository: signverse/api-gateway
+    tag: latest
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    cpuTargetUtilization: 70
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+
+# ─── Auth Service ─────────────────────────────────────────────────────────────
+authService:
+  enabled: true
+  image:
+    repository: signverse/auth-service
+    tag: latest
+  replicaCount: 2
+  service:
+    port: 3001
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+# ─── Telemetry Service ────────────────────────────────────────────────────────
+telemetryService:
+  enabled: true
+  image:
+    repository: signverse/telemetry-service
+    tag: latest
+  replicaCount: 2
+  service:
+    port: 3002
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+
+# ─── WebSocket Service ────────────────────────────────────────────────────────
+websocketService:
+  enabled: true
+  image:
+    repository: signverse/websocket-service
+    tag: latest
+  replicaCount: 3
+  service:
+    port: 3004
+  websocket:
+    maxConnections: 10000
+    pingInterval: 30
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  image: timescale/timescaledb:latest-pg15
+  auth:
+    existingSecret: signverse-db-secret
+  persistence:
+    size: 100Gi
+    storageClass: fast-ssd
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: signverse-redis-secret
+  persistence:
+    size: 10Gi
+
+# ─── Observability ────────────────────────────────────────────────────────────
+observability:
+  prometheus:
+    enabled: true
+    retention: "30d"
+    storageSize: "50Gi"
+  grafana:
+    enabled: true
+    adminPasswordSecret: signverse-grafana-secret
+  loki:
+    enabled: true
+    retention: "7d"
+
+# ─── Secrets (populated via External Secrets Operator or CI) ──────────────────
+secrets:
+  createSecrets: false   # Set true for local dev, false for production (use external secrets)
+  dbUrl: ""
+  jwtSecret: ""
+  redisPassword: ""
