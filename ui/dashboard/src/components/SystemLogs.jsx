@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
+import { useTelemetryStore } from '../store/telemetryStore';
 
-export function SystemLogs({ logs }) {
+export function SystemLogs() {
+  const logs = useTelemetryStore(state => state.logs);
   const scrollRef = useRef(null);
 
   useEffect(() => {

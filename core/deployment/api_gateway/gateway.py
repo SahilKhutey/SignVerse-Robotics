@@ -74,7 +74,19 @@ def kernel_loop():
     while True:
         res = kernel.tick(dummy_frame) # Execute 1000Hz OS Tick
         if isinstance(res, dict) and res.get("status") == "CONNECTED":
-            latest_telemetry = res
+            # Structure into Event Payloads
+            latest_telemetry = {
+                "type": "SYSTEM_METRICS",
+                "payload": {
+                    "status": res.get("status"),
+                    "mode": res.get("mode"),
+                    "q_target": res.get("q_target"),
+                    "perception": res.get("perception"),
+                    "fps": np.random.randint(58, 62), # Simulated metrics
+                    "gpu_vram_mb": np.random.randint(1200, 1500),
+                    "last_update": res.get("last_update")
+                }
+            }
             if res.get("mode") == "ai_inference":
                 MODE_GAUGE.set(1)
             else:

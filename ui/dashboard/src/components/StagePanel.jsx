@@ -2,9 +2,11 @@ import React, { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Environment } from '@react-three/drei';
 import { RobotArm } from './RobotArm';
+import { useTelemetryStore } from '../store/telemetryStore';
 
-export function StagePanel({ telemetry }) {
-  const isConnected = telemetry?.status === 'CONNECTED';
+export function StagePanel() {
+  const telemetry = useTelemetryStore(state => state.telemetry);
+  const isConnected = useTelemetryStore(state => state.isConnected);
   
   return (
     <div className={`glass-panel ${isConnected ? 'active' : ''}`} style={{ display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden' }}>

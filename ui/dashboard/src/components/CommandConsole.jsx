@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useTelemetryStore } from '../store/telemetryStore';
 
-export const CommandConsole = ({ onCommandSend, apiError }) => {
+export function CommandConsole({ onCommandSend }) {
+  const apiError = useTelemetryStore(state => state.apiError);
   const [command, setCommand] = useState('');
   const [apiKey, setApiKey] = useState('signverse_local_dev_key'); // Default for local dev
 
