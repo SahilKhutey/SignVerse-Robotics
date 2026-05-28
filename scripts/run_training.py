@@ -1,6 +1,8 @@
 import argparse
 import sys
 import os
+import torch
+import torch.nn as nn
 
 # Add AI module to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../ai"))

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Security, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Security, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app, Counter, Gauge

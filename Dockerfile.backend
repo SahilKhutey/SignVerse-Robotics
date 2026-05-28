@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir \
 
 # Copy the core Python project
 COPY core /app/core
+COPY backend /app/backend
 COPY start_system.py /app/start_system.py
 
 # Expose API Gateway port

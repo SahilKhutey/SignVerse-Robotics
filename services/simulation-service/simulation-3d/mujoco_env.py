@@ -1,4 +1,5 @@
 try:
+    import os
     import mujoco
     MUJOCO_AVAILABLE = True
 except ImportError:
