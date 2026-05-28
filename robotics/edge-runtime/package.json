@@ -1,0 +1,17 @@
+{
+  "name": "edge-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@shared/sdk": "workspace:*",
+    "@shared/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.2"
+  }
+}

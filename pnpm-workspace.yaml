@@ -1,6 +1,9 @@
 packages:
   - "apps/*"
-  - "services/*"
-  - "engines/*"
-  - "packages/*"
-  - "sdk/*"
+  - "backend/*"
+  - "robotics/*"
+  - "ai/*"
+  - "simulation/*"
+  - "xr/*"
+  - "shared/*"
+  - "tools/*"

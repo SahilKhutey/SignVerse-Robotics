@@ -1,15 +1,18 @@
-import './globals.css'
-import type { Metadata } from 'next'
+import "./globals.css";
 
-export const metadata: Metadata = {
-  title: 'SignVerse Mission Control',
-  description: 'AI-Native Robotics OS Dashboard',
-}
+export const metadata = {
+  title: "SignVerse Dashboard",
+  description: "Robotics Control Center",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body>{children}</body>
     </html>
-  )
+  );
 }

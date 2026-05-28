@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: signverse_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    # For GPU acceleration (optional, requires nvidia-docker)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: signverse_frontend
+    ports:
+      - "5173:80" # Mapping Vite's default dev port to Nginx container port
+    depends_on:
+      - backend
+    environment:
+      # Inject API URL for the compiled React App
+      - VITE_API_URL=http://localhost:8000
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: signverse_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: signverse
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: signverse_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: signverse_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: signverse_qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: signverse_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: signverse_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  prometheus_data:
+  grafana_data:
