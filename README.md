@@ -1,23 +1,60 @@
-# SignVerse-Robotics Platform
+# SignVerse Robotics OS
 
-A Next-Generation Embodied AI Robotics Infrastructure.
+**SignVerse** is an advanced, multidisciplinary "Universal Human → Robot Motion Intelligence Platform."
+It bridges the gap between raw human kinematic data (via teleoperation) and autonomous robotic execution through a sophisticated Python-based operating system.
 
-SignVerse-Robotics has evolved beyond a simple gesture recognition framework into a massive, 10-Phase **Unified Robotics Intelligence Platform**. It provides the architecture to run multimodal LLMs, sync physical hardware via ROS2, orchestrate massive GPU inference clusters, and simulate physics in real-time.
+## Core Features
 
-## The 10-Phase Architecture
-1. **Platform Foundation**: Turborepo, pnpm workspaces, scalable Next.js boundaries.
-2. **Dashboard OS**: Real-time telemetry monitoring UI.
-3. **AI Runtime Core**: FastAPI Inference gateways with GPU orchestrators.
-4. **Robotics Layer**: ROS2 bridges handling physical hardware constraints.
-5. **Digital Twin**: ECS-based Simulation Engines mimicking real-world physics.
-6. **Dataset Ecosystem**: S3 & Qdrant vector search for MLOps training data.
-7. **Agentic Autonomy**: LLM Task Graph planners dictating robotics actions.
-8. **Edge Cloud Deployment**: ONNX-powered Edge devices bursting telemetry to the cloud.
-9. **Enterprise Security**: Zero-Trust API Gateways, HashiCorp Vault, and RBAC.
-10. **Frontier Research**: World Models, BCI isolation, and XR overlays.
+1. **Real-time Teleoperation**: Captures human movements instantly via WebCam using MediaPipe Holistic Tracking.
+2. **Behavior Cloning (AI)**: Includes a full PyTorch pipeline to train an `ActionPolicyNetwork` from SQLite databases, learning to convert human kinematics into robot joint angles.
+3. **Cognitive Reasoning**: Integrates LangChain LLM Agents to parse natural language commands (e.g., "Pick up the block") into structured robotic intents and required skills.
+4. **Digital Twin Web Dashboard**: A professional-grade, glassmorphic React/Three.js command center. It visualizes the real-time telemetry array from the OS and mathematically articulates a 3D robot arm matching the AI's predicted movements at 60 FPS.
+5. **High-Speed Architecture**: Designed around a 1000Hz master control loop (`SignVerseKernel`) with asynchronous FastAPI WebSocket bridges.
 
-## Quick Start
+## System Architecture
+
+The architecture relies strictly on modular separation of concerns under the `core/` directory:
+
+- **`core/perception`**: WebCam streaming, MediaPipe Landmark detection.
+- **`core/robotics`**: Inverse Kinematics (IK), MuJoCo Integration, Coordinate tracking.
+- **`core/learning`**: The 'Brain'. Behavior Cloning (Imitation Learning) PyTorch pipelines.
+- **`core/cognition`**: The 'Mind'. LangChain-powered Semantic Parsing (`MotionReasoner`).
+- **`core/deployment`**: The 'Nervous System'. FastAPI, REST routes, WebSocket connections.
+- **`core/os`**: The 'Heart'. `SignVerseKernel` orchestrating the 1000Hz tick loop.
+
+## Quickstart Guide
+
+### 1. The Core Robotics OS
+Run the main FastAPI Gateway. This boots up the OS kernel, initializes the ML models, loads the LangChain cognitive agents, and opens the WebSockets.
 ```bash
-# Boot the entire cluster
-docker compose up --build
+uvicorn core.deployment.api_gateway.gateway:app --reload
 ```
+
+### 2. The 3D Digital Twin Dashboard
+Launch the React Front-End to interact with the OS visually.
+```bash
+cd ui/dashboard
+npm install
+npm run dev
+```
+Navigate to `http://localhost:5173`. You can type natural language commands to the AI or watch the robot telemetry stream.
+
+### 3. Data Collection (Teleoperation)
+To record yourself moving and build the Behavior Cloning dataset:
+```bash
+python scripts/data_collector.py
+```
+Press `r` to record sessions. Data is stored in `datasets/raw/` (Images + JSON) and indexed in `teleoperation.db`.
+
+### 4. Behavior Cloning Training
+To train the PyTorch Network on your newly collected data:
+```bash
+$env:PYTHONPATH = (Get-Location).Path; python scripts/train.py
+```
+This exports optimized weights to `core/learning/models/policy_latest.pth`.
+
+## Development Roadmap
+- **Phase 1-8**: Perception & Robotics Grounding *(Complete)*
+- **Phase 9-13**: Digital Twin Integration *(Complete)*
+- **Phase 14-17**: LLM Cognition & Imitation Learning *(Complete)*
+- **Next Steps**: Hardware edge-deployment to physical ESP32/Arduino robotic chassis.
