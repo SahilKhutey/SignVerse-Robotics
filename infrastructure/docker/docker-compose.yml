@@ -36,7 +36,7 @@ services:
       - VITE_API_URL=http://localhost:8000
 
   postgres:
-    image: postgres:15-alpine
+    image: timescale/timescaledb:latest-pg15
     container_name: signverse_postgres
     ports:
       - "5432:5432"
@@ -81,9 +81,29 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
 
+  nats:
+    image: nats:alpine
+    container_name: signverse_nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["-js"] # Enable JetStream
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: signverse_mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
   prometheus_data:
   grafana_data:
+  mosquitto_data:
+  mosquitto_log:

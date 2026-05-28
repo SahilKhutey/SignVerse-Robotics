@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package signverse.robotics;
+
+service RobotCommandService {
+  rpc MoveJoint (JointCommand) returns (CommandStatus);
+  rpc StreamTelemetry (TelemetryRequest) returns (stream TelemetryUpdate);
+}
+
+message JointCommand {
+  string robot_id = 1;
+  string joint_name = 2;
+  float target_angle = 3;
+}
+
+message CommandStatus {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message TelemetryRequest {
+  string robot_id = 1;
+}
+
+message TelemetryUpdate {
+  float battery = 1;
+  float cpu = 2;
+  repeated float joint_angles = 3;
+}

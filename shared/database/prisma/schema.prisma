@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("viewer")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Robot {
+  id          String   @id @default(uuid())
+  name        String
+  status      String   @default("offline")
+  lastSeen    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  telemetry   Telemetry[]
+}
+
+model Telemetry {
+  id        String   @id @default(uuid())
+  robotId   String
+  robot     Robot    @relation(fields: [robotId], references: [id])
+  battery   Float
+  cpuUsage  Float
+  timestamp DateTime @default(now())
+}
+
+model Mission {
+  id          String   @id @default(uuid())
+  name        String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SimulationSession {
+  id          String   @id @default(uuid())
+  name        String
+  engine      String   @default("isaac_sim")
+  status      String   @default("running")
+  createdAt   DateTime @default(now())
+}
+
+model AIInferenceLog {
+  id          String   @id @default(uuid())
+  modelName   String
+  latencyMs   Float
+  timestamp   DateTime @default(now())
+}

@@ -1,0 +1,22 @@
+{
+  "name": "auth-service",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "fastify": "^4.26.2",
+    "@fastify/jwt": "^8.0.0",
+    "bcrypt": "^5.1.1",
+    "@shared/database": "workspace:*",
+    "@shared/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.0.0",
+    "@types/bcrypt": "^5.0.2"
+  }
+}
