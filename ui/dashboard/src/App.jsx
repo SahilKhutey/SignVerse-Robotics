@@ -113,8 +113,8 @@ function App() {
             <span>Timeline</span>
           </div>
           <div style={{ flex: 1, padding: '16px', fontFamily: 'var(--os-font-mono)', fontSize: '11px', color: 'var(--os-text-secondary)', overflowY: 'auto' }}>
-            > SignVerse OS Kernel initialized...<br/>
-            > Waiting for pipeline execution...
+            &gt; SignVerse OS Kernel initialized...<br/>
+            &gt; Waiting for pipeline execution...
           </div>
       </footer>
 
