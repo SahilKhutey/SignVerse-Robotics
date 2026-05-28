@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
-    "nats": "^3.0.0"
+    "nats": "^2.29.3"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
