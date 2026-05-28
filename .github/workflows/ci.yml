@@ -46,4 +46,4 @@ jobs:
       
     - name: Build SignVerse Microservices
       run: |
-        docker-compose build
+        docker compose build
