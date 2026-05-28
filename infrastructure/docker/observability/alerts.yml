@@ -1,0 +1,77 @@
+groups:
+  - name: signverse_robotics_alerts
+    rules:
+      # ─── Infrastructure Alerts ──────────────────────────────────────────────
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighCPUUsage
+        expr: process_cpu_seconds_total > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage exceeds 90% for 5 minutes."
+
+      # ─── Robotics Safety Alerts ─────────────────────────────────────────────
+      - alert: RobotConnectionLost
+        expr: signverse_robot_connection_status == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Robot {{ $labels.robot_id }} connection lost"
+          description: "Robot has been unreachable for 30 seconds. E-Stop may be required."
+
+      - alert: RobotThermalCritical
+        expr: signverse_robot_temperature_celsius > 80
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL: Robot {{ $labels.robot_id }} overheating"
+          description: "Temperature {{ $value }}°C exceeds safe limit. Initiating thermal shutdown."
+
+      - alert: RobotMotorOverload
+        expr: signverse_robot_motor_torque_percent > 95
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Motor overload on {{ $labels.robot_id }}"
+          description: "Motor torque at {{ $value }}% capacity."
+
+      # ─── AI Runtime Alerts ───────────────────────────────────────────────────
+      - alert: AIInferenceLatencyHigh
+        expr: signverse_ai_inference_latency_ms > 200
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI inference latency degraded"
+          description: "Inference latency {{ $value }}ms exceeds 200ms threshold."
+
+      - alert: AIConfidenceDrop
+        expr: signverse_ai_confidence_score < 0.6
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI model confidence degraded"
+          description: "Confidence {{ $value }} below 0.6. Possible model drift detected."
+
+      - alert: GPUMemoryCritical
+        expr: signverse_gpu_vram_used_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU VRAM near capacity"
+          description: "GPU memory at {{ $value }}%. Risk of inference OOM failure."

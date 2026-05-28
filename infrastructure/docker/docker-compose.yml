@@ -13,14 +13,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./models:/app/models
-    # For GPU acceleration (optional, requires nvidia-docker)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
 
   frontend:
     build:
@@ -28,11 +20,10 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: signverse_frontend
     ports:
-      - "5173:80" # Mapping Vite's default dev port to Nginx container port
+      - "5173:80"
     depends_on:
       - backend
     environment:
-      # Inject API URL for the compiled React App
       - VITE_API_URL=http://localhost:8000
 
   postgres:
@@ -63,6 +54,8 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  # ─── Observability Stack (PLG: Prometheus + Loki + Grafana) ──────────────────
+
   prometheus:
     image: prom/prometheus:latest
     container_name: signverse_prometheus
@@ -70,16 +63,44 @@ services:
       - "9090:9090"
     volumes:
       - prometheus_data:/prometheus
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: signverse_loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: signverse_promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - ./observability/promtail.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest
     container_name: signverse_grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=signverse_admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+
+  # ─── Event Bus ───────────────────────────────────────────────────────────────
 
   nats:
     image: nats:alpine
@@ -87,7 +108,9 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
-    command: ["-js"] # Enable JetStream
+    command: ["-js"]
+
+  # ─── Edge Robotics (MQTT) ────────────────────────────────────────────────────
 
   mosquitto:
     image: eclipse-mosquitto:2
@@ -104,6 +127,7 @@ volumes:
   redis_data:
   qdrant_data:
   prometheus_data:
+  loki_data:
   grafana_data:
   mosquitto_data:
   mosquitto_log:

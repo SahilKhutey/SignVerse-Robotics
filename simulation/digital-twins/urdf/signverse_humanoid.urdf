@@ -1,0 +1,121 @@
+<?xml version="1.0"?>
+<!--
+  SignVerse Humanoid Robot — Base URDF Definition
+  This model represents a simplified humanoid with:
+  - Mobile base (wheeled)
+  - 2x 6-DOF Arms
+  - Head with camera mount
+  - Sensor suite (IMU, Lidar, RGB-D Camera)
+-->
+<robot name="signverse_humanoid">
+
+  <!-- ─── Base Link ─────────────────────────────────────────────────────── -->
+  <link name="base_link">
+    <inertial>
+      <mass value="25.0"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="0.5"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.4 0.3 0.2"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.2 0.2 0.2 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.4 0.3 0.2"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- ─── Torso ──────────────────────────────────────────────────────────── -->
+  <link name="torso_link">
+    <inertial>
+      <mass value="15.0"/>
+      <inertia ixx="0.5" ixy="0.0" ixz="0.0" iyy="0.5" iyz="0.0" izz="0.2"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <box size="0.35 0.25 0.5"/>
+      </geometry>
+      <material name="dark_grey"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.35 0.25 0.5"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_to_torso" type="fixed">
+    <parent link="base_link"/>
+    <child link="torso_link"/>
+    <origin xyz="0 0 0.35" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ─── Head + Camera Mount ───────────────────────────────────────────── -->
+  <link name="head_link">
+    <inertial>
+      <mass value="2.0"/>
+      <inertia ixx="0.05" ixy="0.0" ixz="0.0" iyy="0.05" iyz="0.0" izz="0.05"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <sphere radius="0.12"/>
+      </geometry>
+      <material name="dark_grey"/>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.12"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="torso_to_head" type="revolute">
+    <parent link="torso_link"/>
+    <child link="head_link"/>
+    <origin xyz="0 0 0.35" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="10" velocity="1.0"/>
+  </joint>
+
+  <!-- ─── IMU Sensor ────────────────────────────────────────────────────── -->
+  <link name="imu_link">
+    <inertial><mass value="0.05"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>
+  </link>
+  <joint name="base_to_imu" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ─── Lidar ─────────────────────────────────────────────────────────── -->
+  <link name="lidar_link">
+    <inertial><mass value="0.3"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>
+    <visual>
+      <geometry><cylinder radius="0.05" length="0.07"/></geometry>
+      <material name="lidar_color"><color rgba="0.1 0.1 0.8 1"/></material>
+    </visual>
+  </link>
+  <joint name="base_to_lidar" type="fixed">
+    <parent link="torso_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="0 0 0.28" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ─── RGB-D Camera ──────────────────────────────────────────────────── -->
+  <link name="camera_link">
+    <inertial><mass value="0.1"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>
+    <visual>
+      <geometry><box size="0.06 0.15 0.04"/></geometry>
+      <material name="camera_color"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="head_to_camera" type="fixed">
+    <parent link="head_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.10 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>
