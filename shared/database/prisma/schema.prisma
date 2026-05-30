@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/client"
 }
 
 datasource db {
@@ -7,52 +8,142 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Users & Auth ──────────────────────────────────────────────────────────────
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  role      String   @default("viewer")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("viewer")
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  missions     Mission[]
 }
 
+// ─── Robots & Fleet ────────────────────────────────────────────────────────────
 model Robot {
-  id          String   @id @default(uuid())
-  name        String
-  status      String   @default("offline")
-  lastSeen    DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  telemetry   Telemetry[]
+  id           String      @id @default(uuid())
+  name         String
+  serialNumber String      @unique
+  model        String      @default("signverse_humanoid_v1")
+  firmwareVersion String   @default("1.0.0")
+  status       String      @default("offline")
+  batteryLevel Float       @default(100.0)
+  latitude     Float?
+  longitude    Float?
+  lastSeen     DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  telemetry    Telemetry[]
+  missions     Mission[]
+  alerts       Alert[]
+  diagnostics  Diagnostic[]
 }
 
+// ─── Telemetry (Time-Series) ───────────────────────────────────────────────────
 model Telemetry {
-  id        String   @id @default(uuid())
-  robotId   String
-  robot     Robot    @relation(fields: [robotId], references: [id])
-  battery   Float
-  cpuUsage  Float
-  timestamp DateTime @default(now())
+  id           String   @id @default(uuid())
+  robotId      String
+  robot        Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  battery      Float
+  cpuUsage     Float
+  gpuUsage     Float    @default(0.0)
+  memoryUsage  Float    @default(0.0)
+  temperature  Float    @default(0.0)
+  motorCurrents Json?   // { left: float, right: float }
+  jointAngles  Json?    // { joint: angle }
+  pose         Json?    // { x, y, z, roll, pitch, yaw }
+  velocity     Json?    // { linear, angular }
+  timestamp    DateTime @default(now())
+
+  @@index([robotId, timestamp])
 }
 
+// ─── Missions ──────────────────────────────────────────────────────────────────
 model Mission {
-  id          String   @id @default(uuid())
-  name        String
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  status       String   @default("pending")
+  priority     Int      @default(2)
+  assignedRobotId String?
+  robot        Robot?   @relation(fields: [assignedRobotId], references: [id])
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+  payload      Json?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
+// ─── Alerts ────────────────────────────────────────────────────────────────────
+model Alert {
+  id           String   @id @default(uuid())
+  robotId      String
+  robot        Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  severity     String   @default("warning")  // info | warning | error | critical
+  category     String   @default("system")   // system | safety | hardware | ai
+  message      String
+  resolved     Boolean  @default(false)
+  resolvedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([robotId, severity, createdAt])
+}
+
+// ─── Diagnostics ───────────────────────────────────────────────────────────────
+model Diagnostic {
+  id           String   @id @default(uuid())
+  robotId      String
+  robot        Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  component    String   // motor | sensor | camera | lidar | battery
+  status       String   @default("ok")  // ok | degraded | failed
+  details      Json?
+  timestamp    DateTime @default(now())
+
+  @@index([robotId, component, timestamp])
+}
+
+// ─── Simulation Sessions ───────────────────────────────────────────────────────
 model SimulationSession {
-  id          String   @id @default(uuid())
-  name        String
-  engine      String   @default("isaac_sim")
-  status      String   @default("running")
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  name         String
+  engine       String   @default("isaac_sim")  // gazebo | isaac_sim | unity
+  environment  String   @default("indoor")
+  status       String   @default("running")    // running | paused | complete | failed
+  robotCount   Int      @default(1)
+  config       Json?
+  startedAt    DateTime @default(now())
+  endedAt      DateTime?
+  createdAt    DateTime @default(now())
 }
 
+// ─── AI Inference Logs ─────────────────────────────────────────────────────────
 model AIInferenceLog {
-  id          String   @id @default(uuid())
-  modelName   String
-  latencyMs   Float
-  timestamp   DateTime @default(now())
+  id           String   @id @default(uuid())
+  robotId      String?
+  modelName    String
+  modelVersion String   @default("1.0.0")
+  inputType    String   @default("image")     // image | lidar | text | multimodal
+  latencyMs    Float
+  confidenceScore Float @default(1.0)
+  outputType   String   @default("classification")
+  flagged      Boolean  @default(false)      // Flagged for review (low confidence, drift)
+  timestamp    DateTime @default(now())
+
+  @@index([modelName, timestamp])
+}
+
+// ─── OTA Updates ───────────────────────────────────────────────────────────────
+model OTAUpdate {
+  id           String   @id @default(uuid())
+  robotId      String
+  updateType   String   @default("firmware")  // firmware | ai_model | config
+  fromVersion  String
+  toVersion    String
+  outcome      String   @default("pending")   // pending | success | failed | rolled_back
+  appliedAt    DateTime?
+  createdAt    DateTime @default(now())
 }

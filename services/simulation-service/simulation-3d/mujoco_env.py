@@ -20,9 +20,9 @@ class MuJoCoEnvironment:
         # For the MVP, if no XML provided, use a simple dummy pendulum string
         dummy_xml = """
         <mujoco>
-            <worlddir>
+            <worldbody>
                 <geom type="plane" size="10 10 0.1" rgba=".9 .9 .9 1"/>
-            </worlddir>
+            </worldbody>
         </mujoco>
         """
         

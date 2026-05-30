@@ -1,4 +1,4 @@
-import DashboardShell from '../layouts/DashboardShell'
+import { DashboardShell } from '../layouts/DashboardShell'
 
 export default function Page() {
   return (

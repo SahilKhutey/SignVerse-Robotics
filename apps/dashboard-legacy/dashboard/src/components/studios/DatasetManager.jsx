@@ -5,6 +5,9 @@ export const DatasetManager = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('raw'); // 'raw', 'processed'
+  const [exportingFile, setExportingFile] = useState(null);
+  const [exportFormat, setExportFormat] = useState('bvh');
+  const [exportingState, setExportingState] = useState('idle'); // 'idle', 'loading', 'success', 'error'
 
   const API_KEY = localStorage.getItem('signverse_api_key') || 'admin_secret_42';
   const API_BASE = 'http://localhost:8000/api/datasets';
@@ -61,8 +64,35 @@ export const DatasetManager = () => {
     }
   };
 
-  const handleExport = (filename) => {
-    alert(`Exporting ${filename} to BVH/URDF format pipeline. (To be implemented in Phase 25)`);
+  const triggerExport = async (filename) => {
+    setExportingState('loading');
+    try {
+      const response = await fetch('http://localhost:8000/api/datasets/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY
+        },
+        body: JSON.stringify({
+          filename: filename,
+          format: exportFormat
+        })
+      });
+      
+      const result = await response.json();
+      if (response.ok) {
+        alert(`Successfully exported to ${exportFormat.toUpperCase()}! File saved at: ${result.file_path}`);
+        setExportingFile(null);
+        setExportingState('success');
+        fetchDatasets();
+      } else {
+        alert(`Export failed: ${result.detail || 'Unknown error'}`);
+        setExportingState('error');
+      }
+    } catch (err) {
+      alert(`Export error: ${err.message}`);
+      setExportingState('error');
+    }
   };
 
   return (
@@ -165,12 +195,41 @@ export const DatasetManager = () => {
                       </span>
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <button 
-                        onClick={() => handleExport(ds.name)}
-                        style={{ background: 'transparent', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginRight: '8px' }}
-                      >
-                        Export
-                      </button>
+                      {exportingFile === ds.name ? (
+                        <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', marginRight: '8px' }}>
+                          <select 
+                            value={exportFormat}
+                            onChange={(e) => setExportFormat(e.target.value)}
+                            style={{ background: '#0a192f', border: '1px solid var(--color-primary)', color: '#fff', padding: '4px 8px', borderRadius: '4px', outline: 'none' }}
+                          >
+                            <option value="bvh">BVH</option>
+                            <option value="usd">USD</option>
+                            <option value="gltf">glTF</option>
+                            <option value="mujoco">MuJoCo XML</option>
+                            <option value="fbx">Blender FBX</option>
+                          </select>
+                          <button 
+                            onClick={() => triggerExport(ds.name)}
+                            disabled={exportingState === 'loading'}
+                            style={{ background: 'var(--color-primary)', border: 'none', color: '#000', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            {exportingState === 'loading' ? '...' : 'Go'}
+                          </button>
+                          <button 
+                            onClick={() => setExportingFile(null)}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => { setExportingFile(ds.name); setExportFormat('bvh'); }}
+                          style={{ background: 'transparent', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginRight: '8px' }}
+                        >
+                          Export
+                        </button>
+                      )}
                       <button 
                         onClick={() => handleDelete(ds.name)}
                         style={{ background: 'rgba(255, 0, 0, 0.1)', border: '1px solid var(--color-error)', color: 'var(--color-error)', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer' }}

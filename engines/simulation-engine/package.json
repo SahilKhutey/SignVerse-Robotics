@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "private": true,
   "dependencies": {
-    "miniplex": "^3.0.0",
+    "miniplex": "^2.0.0",
     "three": "^0.164.0"
   }
 }

@@ -1,17 +1,20 @@
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
-export const metadata = {
-  title: "SignVerse Dashboard",
-  description: "Robotics Control Center",
+export const metadata: Metadata = {
+  title: 'SignVerse OS — Control Center',
+  description:
+    'Real-time robotics telemetry dashboard for the SignVerse OS platform. ' +
+    'Monitor joint angles, constraint violations, inference mode, and anatomical retargeting data.',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body>{children}</body>
     </html>
   );

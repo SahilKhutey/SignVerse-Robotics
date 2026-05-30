@@ -3,9 +3,9 @@ import React from 'react';
 import { Activity, ShieldAlert, Cpu } from 'lucide-react';
 import { useRealtimeStream } from 'api-contracts';
 
-export function DashboardShell() {
-  const aiStream = useRealtimeStream('ws://localhost:8001/inference');
-  const robStream = useRealtimeStream('ws://localhost:8002/robotics');
+export function DashboardShell({ children }: { children?: React.ReactNode }) {
+  const aiStream = useRealtimeStream('ws://localhost:3000/ws/ai-inference');
+  const robStream = useRealtimeStream('ws://localhost:3000/ws/telemetry');
 
   return (
     <div className="flex h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden">
@@ -50,49 +50,55 @@ export function DashboardShell() {
           </div>
         </header>
         
-        <div className="flex-1 p-6 grid grid-cols-12 gap-6">
-          <div className="col-span-8 bg-neutral-900 border border-neutral-800 rounded-xl flex items-center justify-center relative overflow-hidden">
-            <div className="absolute top-4 left-4 flex gap-2">
-              <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded border border-neutral-800 text-xs font-mono text-neutral-400">
-                CAM_01 [RGB_DEPTH]
+        {children ? (
+          <div className="flex-1 overflow-auto p-6">
+            {children}
+          </div>
+        ) : (
+          <div className="flex-1 p-6 grid grid-cols-12 gap-6">
+            <div className="col-span-8 bg-neutral-900 border border-neutral-800 rounded-xl flex items-center justify-center relative overflow-hidden">
+              <div className="absolute top-4 left-4 flex gap-2">
+                <div className="px-3 py-1 bg-black/50 backdrop-blur-md rounded border border-neutral-800 text-xs font-mono text-neutral-400">
+                  CAM_01 [RGB_DEPTH]
+                </div>
               </div>
+              
+              {/* Real SDK Vision Output */}
+              {aiStream.data ? (
+                  <div className="w-full h-full flex items-center justify-center border-4 border-emerald-900/30 text-emerald-500 font-mono">
+                      [LIVE VISION INGESTION ACTIVE] <br/>
+                      BBox: {JSON.stringify(aiStream.data.bounding_boxes)}
+                  </div>
+              ) : (
+                  <div className="text-neutral-600 font-mono tracking-widest flex items-center gap-3">
+                    <ShieldAlert size={20} />
+                    NO SIGNAL DETECTED
+                  </div>
+              )}
             </div>
             
-            {/* Real SDK Vision Output */}
-            {aiStream.data ? (
-                <div className="w-full h-full flex items-center justify-center border-4 border-emerald-900/30 text-emerald-500 font-mono">
-                    [LIVE VISION INGESTION ACTIVE] <br/>
-                    BBox: {JSON.stringify(aiStream.data.bounding_boxes)}
+            <div className="col-span-4 space-y-6">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
+                    <Cpu size={16} className="text-emerald-500" />
+                    Robotics Kinematics
+                  </h3>
                 </div>
-            ) : (
-                <div className="text-neutral-600 font-mono tracking-widest flex items-center gap-3">
-                  <ShieldAlert size={20} />
-                  NO SIGNAL DETECTED
-                </div>
-            )}
-          </div>
-          
-          <div className="col-span-4 space-y-6">
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-neutral-300 flex items-center gap-2">
-                  <Cpu size={16} className="text-emerald-500" />
-                  Robotics Kinematics
-                </h3>
-              </div>
-              <div className="space-y-3 font-mono text-xs">
-                <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
-                  <span className="text-neutral-500">JOINT 0 (Base)</span>
-                  <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J0.toFixed(2) : "0.00"}°</span>
-                </div>
-                <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
-                  <span className="text-neutral-500">JOINT 1 (Shoulder)</span>
-                  <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J1.toFixed(2) : "0.00"}°</span>
+                <div className="space-y-3 font-mono text-xs">
+                  <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
+                    <span className="text-neutral-500">JOINT 0 (Base)</span>
+                    <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J0.toFixed(2) : "0.00"}°</span>
+                  </div>
+                  <div className="flex justify-between p-2 bg-neutral-950 rounded border border-neutral-800">
+                    <span className="text-neutral-500">JOINT 1 (Shoulder)</span>
+                    <span className="text-emerald-400">{robStream.data ? robStream.data.joints.J1.toFixed(2) : "0.00"}°</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

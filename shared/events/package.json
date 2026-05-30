@@ -2,11 +2,18 @@
   "name": "@shared/events",
   "version": "1.0.0",
   "private": true,
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
   "dependencies": {
     "nats": "^2.29.3"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.4.0",
+    "rimraf": "^5.0.0"
   }
 }

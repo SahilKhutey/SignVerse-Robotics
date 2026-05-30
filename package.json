@@ -1,18 +1,22 @@
 {
   "name": "signverse-robotics",
   "private": true,
-  "packageManager": "pnpm@10",
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "db:generate": "pnpm --filter @shared/database prisma generate",
+    "db:migrate": "pnpm --filter @shared/database prisma migrate dev",
+    "db:studio": "pnpm --filter @shared/database prisma studio"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.4.0",
     "eslint": "^9.0.0",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "@types/node": "^20.0.0"
   }
 }

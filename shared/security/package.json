@@ -1,8 +1,14 @@
 {
-  "name": "@signverse/security",
+  "name": "@shared/security",
   "version": "1.0.0",
   "private": true,
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
   "dependencies": {
     "jose": "^5.9.0",
     "zod": "^3.23.0"

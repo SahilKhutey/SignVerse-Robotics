@@ -11,6 +11,38 @@ export function CaptureStudio() {
   const [sourceType, setSourceType] = useState('webcam');
   const [socket, setSocket] = useState(null);
   const setLivePose = useRobotStore(state => state.setLivePose);
+  
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [ingestionStatus, setIngestionStatus] = useState('');
+  const [ingestionLoading, setIngestionLoading] = useState(false);
+
+  const handleYoutubeIngest = async (e) => {
+    e.preventDefault();
+    if (!youtubeUrl) return;
+    setIngestionLoading(true);
+    setIngestionStatus('');
+    try {
+      const response = await fetch('http://localhost:8000/api/ingest/youtube', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': localStorage.getItem('signverse_api_key') || 'admin_secret_42'
+        },
+        body: JSON.stringify({ url: youtubeUrl })
+      });
+      const result = await response.json();
+      if (response.ok) {
+        setIngestionStatus(`SUCCESS: Ingestion job queued with ID ${result.job_id}`);
+        setYoutubeUrl('');
+      } else {
+        setIngestionStatus(`FAILED: ${result.detail || 'Unknown error'}`);
+      }
+    } catch (err) {
+      setIngestionStatus(`ERROR: ${err.message}`);
+    } finally {
+      setIngestionLoading(false);
+    }
+  };
   const setRobotAngles = useRobotStore(state => state.setRobotAngles);
   const setLiveGesture = useRobotStore(state => state.setLiveGesture);
   
@@ -138,27 +170,30 @@ export function CaptureStudio() {
       <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
 
       <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid var(--os-border-color)', paddingBottom: '16px' }}>
-        <button 
-          onClick={isStreaming ? stopWebcam : startWebcam}
-          style={{ 
-            background: isStreaming ? 'var(--os-status-error)' : 'var(--os-accent-primary)',
-            color: '#fff',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontFamily: 'var(--os-font-display)',
-            fontWeight: 600
-          }}
-        >
-          {isStreaming ? 'Stop Capture' : 'Start Webcam'}
-        </button>
+        {sourceType !== 'youtube' && (
+          <button 
+            onClick={isStreaming ? stopWebcam : startWebcam}
+            style={{ 
+              background: isStreaming ? 'var(--os-status-error)' : 'var(--os-accent-primary)',
+              color: '#fff',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontFamily: 'var(--os-font-display)',
+              fontWeight: 600
+            }}
+          >
+            {isStreaming ? 'Stop Capture' : 'Start Webcam'}
+          </button>
+        )}
         <select 
           value={sourceType} 
           onChange={(e) => setSourceType(e.target.value)}
           style={{ background: 'var(--os-bg-panel)', color: 'var(--os-text-primary)', border: '1px solid var(--os-border-color)', borderRadius: '4px', padding: '4px 8px' }}
         >
           <option value="webcam">USB Webcam</option>
+          <option value="youtube">YouTube URL Ingestion</option>
           <option value="rtsp">RTSP Stream</option>
           <option value="video">Local Video File</option>
         </select>
@@ -167,23 +202,56 @@ export function CaptureStudio() {
       {/* Main Viewport Grid */}
       <div style={{ display: 'flex', flex: 1, gap: '16px', minHeight: 0 }}>
         
-        {/* Left: Live Video Preview */}
-        <div style={{ flex: 2, background: 'var(--os-bg-panel)', borderRadius: 'var(--os-border-radius)', overflow: 'hidden', position: 'relative', border: '1px solid var(--os-border-color)', minHeight: 0 }}>
+        {/* Left: Live Video Preview / YouTube Input */}
+        <div style={{ flex: 2, background: 'var(--os-bg-panel)', borderRadius: 'var(--os-border-radius)', overflow: 'hidden', position: 'relative', border: '1px solid var(--os-border-color)', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.6)', padding: '4px 8px', borderRadius: '4px', fontSize: '10px', color: 'var(--os-accent-primary)', fontFamily: 'var(--os-font-mono)', zIndex: 10 }}>
-            RAW CAPTURE FEED
+            {sourceType === 'youtube' ? 'YOUTUBE PIPELINE INGESTION' : 'RAW CAPTURE FEED'}
           </div>
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
-          />
-          {/* Pose Overlay Canvas will go exactly on top of the video */}
-          <canvas 
-            ref={canvasRef}
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-          />
+          
+          {sourceType === 'youtube' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', padding: '32px', boxSizing: 'border-box' }}>
+              <form onSubmit={handleYoutubeIngest} style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '16px', background: 'rgba(255,255,255,0.03)', padding: '24px', borderRadius: '8px', border: '1px solid var(--os-border-color)', backdropFilter: 'blur(10px)' }}>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--os-text-primary)' }}>🔗 YouTube URL Ingestion</div>
+                <div style={{ fontSize: '11px', color: 'var(--os-text-muted)' }}>Enter a YouTube video URL containing sign language or human movement to queue it for automatic real-time ingestion, frame extraction, and skeletal perception.</div>
+                
+                <input 
+                  type="text" 
+                  placeholder="https://www.youtube.com/watch?v=..." 
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  style={{ background: '#0a192f', border: '1px solid var(--os-border-color)', color: '#fff', padding: '10px 14px', borderRadius: '4px', outline: 'none', fontSize: '12px' }}
+                />
+                
+                <button 
+                  type="submit" 
+                  disabled={ingestionLoading}
+                  style={{ background: 'var(--os-accent-primary)', border: 'none', color: '#fff', padding: '10px 20px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+                >
+                  {ingestionLoading ? 'Processing & Queuing...' : '🚀 Queue Ingestion'}
+                </button>
+                
+                {ingestionStatus && (
+                  <div style={{ padding: '8px 12px', borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--os-font-mono)', background: ingestionStatus.startsWith('SUCCESS') ? 'rgba(0,255,136,0.1)' : 'rgba(255,0,0,0.1)', color: ingestionStatus.startsWith('SUCCESS') ? 'var(--os-status-success)' : 'var(--os-status-error)', border: `1px solid ${ingestionStatus.startsWith('SUCCESS') ? 'var(--os-status-success)' : 'var(--os-status-error)'}` }}>
+                    {ingestionStatus}
+                  </div>
+                )}
+              </form>
+            </div>
+          ) : (
+            <>
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted 
+                style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
+              />
+              <canvas 
+                ref={canvasRef}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+              />
+            </>
+          )}
         </div>
 
         {/* Right: Telemetry & Pipeline Jobs */}

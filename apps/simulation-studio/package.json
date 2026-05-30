@@ -4,17 +4,26 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build"
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
     "next": "14.2.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "api-contracts": "workspace:*",
     "@react-three/fiber": "^8.16.0",
     "@react-three/drei": "^9.105.0",
     "three": "^0.160.0",
     "lucide-react": "^0.379.0",
     "tailwindcss": "^3.4.3",
     "postcss": "^8.4.38"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@types/three": "^0.160.0",
+    "typescript": "^5.7.3"
   }
 }

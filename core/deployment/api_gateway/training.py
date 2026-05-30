@@ -1,73 +1,97 @@
-import os
-import random
+"""
+Training API Router
+====================
+Replaces the mock data with live stats from the TrainingOrchestrator
+that is running inside the kernel (accessed via gateway_state).
+"""
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import Any, Dict
+
 from core.os.utils.logger import setup_logger
+from core.deployment.api_gateway import gateway_state
 
 logger = setup_logger("Training_Router")
 
 router = APIRouter(prefix="/api/training", tags=["Intelligence & Training"])
 
-# Mock state for training sessions
-MOCK_RUNS = {
-    "run_001": {
-        "id": "run_001",
-        "name": "Unitree_H1_Walk_PPO",
-        "algorithm": "PPO",
-        "status": "Running",
-        "epoch": 1450,
-        "total_epochs": 5000,
-        "reward": 45.2,
-        "actor_loss": 0.041,
-        "critic_loss": 0.125
-    },
-    "run_002": {
-        "id": "run_002",
-        "name": "UR5e_Grasp_IL",
-        "algorithm": "Behavior Cloning",
-        "status": "Completed",
-        "epoch": 2000,
-        "total_epochs": 2000,
-        "reward": 98.1,
-        "actor_loss": 0.002,
-        "critic_loss": 0.005
-    }
-}
 
-class ControlAction(BaseModel):
-    action: str  # "stop", "checkpoint"
+# ── Live orchestrator stats ───────────────────────────────────────────────────
+
+@router.get("/status")
+async def get_training_status() -> Dict[str, Any]:
+    """
+    Return live stats from the TrainingOrchestrator running inside the kernel.
+    Fields:
+      is_training, total_train_runs, new_weights_ready,
+      ema_train_loss, ema_val_loss, best_checkpoint, recorder (dict)
+    """
+    kernel = gateway_state.kernel
+    if kernel is None:
+        return {"status": "kernel_offline", "stats": {}}
+
+    try:
+        stats = kernel.orchestrator.stats
+        return {"status": "ok", "stats": stats}
+    except AttributeError:
+        return {"status": "ok", "stats": {"error": "orchestrator not attached"}}
+
 
 @router.get("/runs")
-async def get_runs():
-    # Simulate slight fluctuation in metrics for running sessions
-    for r in MOCK_RUNS.values():
-        if r["status"] == "Running":
-            r["epoch"] += random.randint(1, 10)
-            r["reward"] += random.uniform(-0.5, 1.2)
-            r["actor_loss"] *= random.uniform(0.95, 1.02)
-            r["critic_loss"] *= random.uniform(0.98, 1.05)
-            
-            if r["epoch"] >= r["total_epochs"]:
-                r["epoch"] = r["total_epochs"]
-                r["status"] = "Completed"
+async def get_runs() -> Dict[str, Any]:
+    """
+    Return all training run history from the orchestrator's EpochMetrics log.
+    Each entry: epoch, train_loss, val_loss, lr, elapsed_s, improved.
+    """
+    kernel = gateway_state.kernel
+    if kernel is None:
+        return {"status": "kernel_offline", "runs": []}
 
-    return {"status": "success", "runs": list(MOCK_RUNS.values())}
+    try:
+        history = kernel.orchestrator.trainer.history
+        runs = [
+            {
+                "epoch":      m.epoch,
+                "train_loss": round(m.train_loss, 6),
+                "val_loss":   round(m.val_loss,   6),
+                "lr":         m.lr,
+                "elapsed_s":  round(m.elapsed_s, 3),
+                "improved":   m.improved,
+            }
+            for m in history
+        ]
+        return {"status": "ok", "runs": runs, "total": len(runs)}
+    except AttributeError:
+        return {"status": "ok", "runs": [], "total": 0}
 
-@router.post("/runs/{run_id}/control")
-async def control_run(run_id: str, action: ControlAction):
-    if run_id not in MOCK_RUNS:
-        raise HTTPException(status_code=404, detail="Run not found")
-    
-    run = MOCK_RUNS[run_id]
-    
-    if action.action == "stop":
-        run["status"] = "Stopped"
-        logger.info(f"Training run {run_id} manually stopped.")
-        return {"status": "success", "message": f"Run {run_id} stopped."}
-    
-    elif action.action == "checkpoint":
-        logger.info(f"Checkpoint saved for {run_id} at epoch {run['epoch']}.")
-        return {"status": "success", "message": f"Checkpoint saved at epoch {run['epoch']}."}
-    
-    raise HTTPException(status_code=400, detail="Invalid action")
+
+# ── Control actions ───────────────────────────────────────────────────────────
+
+class ControlAction(BaseModel):
+    action: str   # "checkpoint" | "acknowledge"
+
+
+@router.post("/control")
+async def control_training(action: ControlAction) -> Dict[str, Any]:
+    kernel = gateway_state.kernel
+    if kernel is None:
+        raise HTTPException(status_code=503, detail="Kernel offline")
+
+    orch = kernel.orchestrator
+
+    if action.action == "acknowledge":
+        orch.acknowledge_new_weights()
+        return {"status": "success", "message": "New weights acknowledged"}
+
+    if action.action == "checkpoint":
+        path = orch.best_checkpoint_path
+        if path.exists():
+            return {
+                "status":  "success",
+                "message": f"Best checkpoint at {path}",
+                "path":    str(path),
+            }
+        return {"status": "no_checkpoint", "message": "No checkpoint saved yet"}
+
+    raise HTTPException(status_code=400, detail=f"Unknown action: {action.action}")

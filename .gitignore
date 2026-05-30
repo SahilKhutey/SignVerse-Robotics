@@ -1,7 +1,25 @@
 node_modules/
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .DS_Store
 dist/
 build/
+*.log
+*.tsbuildinfo
+.pytest_cache/
+
+# Framework and task-runner caches
+.turbo/
+**/.turbo/
+.next/
+**/.next/
+
+# Generated clients and local artifacts
+shared/database/src/generated/
+exports/
+tests/exports/
+core/datasets/processed/
+core/datasets/raw_uploads/

@@ -30,9 +30,24 @@ def export_bvh(hierarchy_dict, root_node, bone_lengths, frames, output_path):
     bvh_content += f"Frames: {len(frames)}\n"
     bvh_content += "Frame Time: 0.033333\n"
     
-    # In reality, extract Euler angles from frame rotations
     for f in frames:
-        bvh_content += "0.0 0.0 0.0 " * len(hierarchy_dict) + "\n"
+        row = []
+        trans = f.get("translation", [0.0, 0.0, 0.0])
+        # ROOT node channels: Xposition Yposition Zposition Zrotation Yrotation Xrotation
+        row.extend([f"{trans[0]:.6f}", f"{trans[1]:.6f}", f"{trans[2]:.6f}", "0.0", "0.0", "0.0"])
+        
+        joints = f.get("joints", {})
+        def get_joint_values(node):
+            vals = []
+            if node != root_node:
+                j_val = joints.get(node, 0.0)
+                vals.extend([f"{j_val:.6f}", "0.0", "0.0"])
+            for child in hierarchy_dict.get(node, []):
+                vals.extend(get_joint_values(child))
+            return vals
+            
+        row.extend(get_joint_values(root_node))
+        bvh_content += " ".join(row) + "\n"
         
     with open(output_path, 'w') as file:
         file.write(bvh_content)
