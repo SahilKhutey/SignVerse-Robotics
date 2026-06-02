@@ -21,7 +21,11 @@ class MotionTokenizer:
             
             # Simple quantization
             for val in vec:
-                # Bin -1 to 1 into `bins` discrete tokens
-                binned = int(np.clip((val + 1) / 2 * self.bins, 0, self.bins - 1))
+                if np.isnan(val):
+                    binned = self.bins // 2
+                else:
+                    # Bin -1 to 1 into `bins` discrete tokens
+                    binned = int(np.clip((val + 1) / 2 * self.bins, 0, self.bins - 1))
                 tokens.append(f"TOK_{binned}")
         return tokens
+
