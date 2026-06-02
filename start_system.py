@@ -36,17 +36,18 @@ def start_backend():
     processes.append(p)
     
 def start_frontend():
-    dashboard_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "ui", "dashboard")
+    root_dir = os.path.abspath(os.path.dirname(__file__))
+    dashboard_dir = os.path.join(root_dir, "apps", "dashboard-web")
     
-    if not os.path.exists(os.path.join(dashboard_dir, "node_modules")):
-        print("[OS Orchestrator] React node_modules not found. Running npm install...")
-        subprocess.run(["npm", "install"], cwd=dashboard_dir, shell=True)
+    if not os.path.exists(os.path.join(root_dir, "node_modules")):
+        print("[OS Orchestrator] Workspace node_modules not found. Running pnpm install...")
+        subprocess.run(["pnpm", "install"], cwd=root_dir, shell=True)
         
-    print("[OS Orchestrator] Booting React 3D Dashboard (Vite)...")
-    # shell=True is often required on Windows for npm commands
+    print("[OS Orchestrator] Booting React Control Center Dashboard (Next.js)...")
+    # Use pnpm filter to run dev server
     p = subprocess.Popen(
-        ["npm", "run", "dev"],
-        cwd=dashboard_dir,
+        ["pnpm", "--filter", "dashboard-web", "run", "dev"],
+        cwd=root_dir,
         shell=True
     )
     processes.append(p)
