@@ -7,7 +7,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copy monorepo configuration files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc tsconfig.base.json ./
 
 # Copy packages and dashboard source code (exclude node_modules via .dockerignore)
 COPY apps/dashboard-web ./apps/dashboard-web
