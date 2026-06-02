@@ -43,10 +43,22 @@ class MuJoCoEnvironment:
             
     def apply_joint_angles(self, joint_dict):
         '''
-        Maps commanded angles to the actuator ctrl arrays.
+        Maps commanded angles to the actuator ctrl arrays and joint position arrays.
         '''
         if not self.model or not self.data: return
         
-        # In a real mapping, we map string joint names to mujoco IDs
-        # e.g., mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "l_shoulder")
-        pass
+        for name, angle in joint_dict.items():
+            try:
+                # Find joint ID in MuJoCo model
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                if joint_id != -1:
+                    # Get index in qpos array (jnt_qposadr) and write the joint position
+                    qpos_adr = self.model.jnt_qposadr[joint_id]
+                    self.data.qpos[qpos_adr] = angle
+                
+                # Also try to map to actuator control if an actuator has this name
+                actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+                if actuator_id != -1:
+                    self.data.ctrl[actuator_id] = angle
+            except Exception:
+                pass
