@@ -40,11 +40,17 @@ class RoboticsCommandBus:
     """Central registry for all active robots."""
     def __init__(self):
         self.active_robots: Dict[str, RobotHardwareInterface] = {}
+        # Alias for test suite compatibility
+        self.robots = self.active_robots
         
     def register_robot(self, robot_id: str, robot: RobotHardwareInterface):
         self.active_robots[robot_id] = robot
         robot.connect()
         
+    def register(self, robot: RobotHardwareInterface):
+        """Compat registration mapping robot.name directly."""
+        self.register_robot(robot.name, robot)
+
     def get_robot(self, robot_id: str) -> RobotHardwareInterface:
         return self.active_robots.get(robot_id)
 
@@ -56,3 +62,4 @@ class RoboticsCommandBus:
 robot_bus = RoboticsCommandBus()
 # Register a dummy robot by default for Digital Twin
 robot_bus.register_robot("digital_twin_1", DummyWebSocketRobot())
+

@@ -9,15 +9,24 @@ import shutil
 
 # ── Resolve workspace root and inject namespace paths ─────────────────────────
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
-curr = TEST_DIR
-while curr and not os.path.exists(os.path.join(curr, "packages", "motion-format", "svmf.py")):
-    parent = os.path.dirname(curr)
-    if parent == curr:
-        break
-    curr = parent
-SVR_ROOT = curr
+parts = TEST_DIR.replace('\\', '/').split('/')
+if "sign-verse-robotics" in parts:
+    idx = parts.index("sign-verse-robotics")
+    SVR_ROOT = "/".join(parts[:idx+1])
+else:
+    curr = TEST_DIR
+    SVR_ROOT = curr
+    while curr:
+        if os.path.exists(os.path.join(curr, "sign-verse-robotics")):
+            SVR_ROOT = os.path.join(curr, "sign-verse-robotics")
+            break
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
 WORKSPACE_ROOT = os.path.dirname(SVR_ROOT)
 EDGE_RT  = os.path.join(WORKSPACE_ROOT, "robotics", "edge-runtime")
+
 
 
 for p in [SVR_ROOT, EDGE_RT]:

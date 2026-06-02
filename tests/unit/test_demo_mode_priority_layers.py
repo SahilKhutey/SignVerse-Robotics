@@ -5,16 +5,25 @@ import pytest
 
 # Inject namespace path to resolve sign-verse-robotics packages
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
-curr = TEST_DIR
-while curr and not os.path.exists(os.path.join(curr, "packages", "motion-format", "svmf.py")):
-    parent = os.path.dirname(curr)
-    if parent == curr:
-        break
-    curr = parent
-SVR_ROOT = curr
+parts = TEST_DIR.replace('\\', '/').split('/')
+if "sign-verse-robotics" in parts:
+    idx = parts.index("sign-verse-robotics")
+    SVR_ROOT = "/".join(parts[:idx+1])
+else:
+    curr = TEST_DIR
+    SVR_ROOT = curr
+    while curr:
+        if os.path.exists(os.path.join(curr, "sign-verse-robotics")):
+            SVR_ROOT = os.path.join(curr, "sign-verse-robotics")
+            break
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
 
 if SVR_ROOT not in sys.path:
     sys.path.insert(0, SVR_ROOT)
+
 
 
 from motion_fusion import JointKalmanFilter, TemporalTracker, IdentityManager, SkeletonFusion
