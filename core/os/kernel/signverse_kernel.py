@@ -8,7 +8,7 @@ import os
 
 # Dynamic path injection for robotics/edge-runtime state
 kernel_dir = os.path.dirname(os.path.abspath(__file__))
-workspace_root = os.path.abspath(os.path.join(kernel_dir, "..", "..", "..", ".."))
+workspace_root = os.path.abspath(os.path.join(kernel_dir, "..", "..", ".."))
 edge_runtime_path = os.path.join(workspace_root, "robotics", "edge-runtime")
 if edge_runtime_path not in sys.path:
     sys.path.insert(0, edge_runtime_path)
