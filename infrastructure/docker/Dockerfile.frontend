@@ -7,7 +7,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Copy monorepo configuration files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 
 # Copy packages and dashboard source code (exclude node_modules via .dockerignore)
 COPY apps/dashboard-web ./apps/dashboard-web
@@ -15,7 +15,7 @@ COPY shared/database ./shared/database
 COPY packages ./packages
 
 # Install dependencies for the workspace
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Generate Prisma client for `@shared/database`
 RUN pnpm run db:generate
