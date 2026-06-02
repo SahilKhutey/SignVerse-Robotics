@@ -130,6 +130,10 @@ interface SignVerseState {
   _setPipelineLoading: () => void;
   _setPipelineJobs: (jobs: PipelineJobSnapshot[]) => void;
   _setPipelineError: (message: string) => void;
+
+  // Demo mode state
+  demoMode:          boolean;
+  setDemoMode:       (val: boolean) => void;
 }
 
 export const useSignVerseStore = create<SignVerseState>((set) => ({
@@ -145,6 +149,8 @@ export const useSignVerseStore = create<SignVerseState>((set) => ({
   pipelineStatus: 'idle',
   pipelineError: null,
   lastPipelinePollTs: 0,
+  demoMode:      false,
+  setDemoMode:   (val) => set({ demoMode: val }),
 
   _setFrame: (f) => set((s) => {
     const entry: LogEntry = {
@@ -204,6 +210,7 @@ let _pingTimer:       ReturnType<typeof setInterval> | null = null;
 let _pollTimer:       ReturnType<typeof setInterval> | null = null;
 let _attempt:         number = 0;
 let _pipelinePollInFlight = false;
+let _lastFrameProcessTime = 0;
 
 /**
  * Exponential backoff with ±20% jitter, capped at BACKOFF_MAX_MS.
@@ -224,8 +231,9 @@ function _connect() {
   _ws.onopen = () => {
     _attempt = 0;    // reset backoff on successful connection
     store._setWsStatus('connected');
-    // Send sync handshake
-    _ws?.send(JSON.stringify({ action: 'sync', last_received_timestamp: 0 }));
+    // Send sync handshake with last received timestamp (in seconds) for catch-up
+    const lastTsSec = store.lastFrameTs > 0 ? store.lastFrameTs / 1000 : 0;
+    _ws?.send(JSON.stringify({ action: 'sync', last_received_timestamp: lastTsSec }));
     // Start ping timer for RTT measurement
     _startPing();
   };
@@ -236,11 +244,15 @@ function _connect() {
       const s   = useSignVerseStore.getState();
 
       if (msg.type === 'SYSTEM_METRICS' && msg.payload) {
-        const f: TelemetryFrame = msg.payload;
-        s._setFrame(f);
+        const now = Date.now();
+        // Limit store updates & renders to ~30 FPS (every 33ms)
+        if (now - _lastFrameProcessTime >= 33) {
+          const f: TelemetryFrame = msg.payload;
+          s._setFrame(f);
+          _lastFrameProcessTime = now;
+        }
 
-        // Fix #8: collect ALL violations, not just hard
-        const vs = f.retargeting?.violations ?? [];
+        const vs = msg.payload.retargeting?.violations ?? [];
         if (vs.length > 0) s._addViolations(vs);
       }
 

@@ -114,19 +114,17 @@ def _kernel_loop(kernel: SignVerseKernel, loop: asyncio.AbstractEventLoop):
 
     async def _broadcast(payload: dict):
         """Must be called from within the event-loop thread."""
-        dead: list[asyncio.Queue] = []
         with _client_queues_lock:
             queues = list(_client_queues)
         for q in queues:
             try:
                 q.put_nowait(payload)
             except asyncio.QueueFull:
-                dead.append(q)
-        # Clean overflowed queues (slow clients)
-        if dead:
-            with _client_queues_lock:
-                for dq in dead:
-                    _client_queues.discard(dq)
+                try:
+                    q.get_nowait()  # Drop oldest frame
+                    q.put_nowait(payload)  # Insert latest frame
+                except Exception:
+                    pass
 
     while not getattr(kernel, "is_shutdown", False):
         t0 = time.perf_counter()

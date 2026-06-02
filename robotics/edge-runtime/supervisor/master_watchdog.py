@@ -164,6 +164,7 @@ class MasterWatchdog:
         start_time = time.time()
         success = True
         
+        last_gc_time = time.time()
         while self.running:
             # Check for max runtime limit (useful for testing)
             if max_runtime_s and (time.time() - start_time >= max_runtime_s):
@@ -174,6 +175,20 @@ class MasterWatchdog:
                 self.trigger_estop()
                 success = False
                 break
+                
+            # Periodic memory garbage collection and logging to prevent leaks
+            now = time.time()
+            if now - last_gc_time > 10.0:  # Run every 10 seconds
+                import gc
+                gc.collect()
+                try:
+                    import psutil
+                    process = psutil.Process(os.getpid())
+                    mem_mb = process.memory_info().rss / (1024 * 1024)
+                    logger.info(f"[Supervisor] Memory footprint: {mem_mb:.2f} MB")
+                except ImportError:
+                    pass
+                last_gc_time = now
                 
             time.sleep(0.01) # Check loop rate (100Hz)
             

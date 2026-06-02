@@ -159,8 +159,56 @@ export default function SystemMetricsBar() {
           </div>
         </div>
 
-        {/* WS status */}
-        <WsStatusBadge />
+        {/* Demo Mode Toggle & WS status */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => useSignVerseStore.getState().setDemoMode(!useSignVerseStore.getState().demoMode)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: 'var(--font-sans)',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'all 0.2s var(--ease-smooth)',
+              border: useSignVerseStore(s => s.demoMode)
+                ? '1px solid rgba(168,85,247,0.5)'
+                : '1px solid var(--border-subtle)',
+              background: useSignVerseStore(s => s.demoMode)
+                ? 'linear-gradient(135deg, rgba(168,85,247,0.2) 0%, rgba(99,102,241,0.1) 100%)'
+                : 'transparent',
+              color: useSignVerseStore(s => s.demoMode)
+                ? 'var(--mode-ai)'
+                : '#94a3b8',
+              boxShadow: useSignVerseStore(s => s.demoMode)
+                ? '0 0 10px rgba(168,85,247,0.2)'
+                : 'none',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.02)';
+              if (!useSignVerseStore.getState().demoMode) {
+                e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                e.currentTarget.style.color = '#f1f5f9';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1.0)';
+              if (!useSignVerseStore.getState().demoMode) {
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                e.currentTarget.style.color = '#94a3b8';
+              }
+            }}
+          >
+            <span>❖</span>
+            {useSignVerseStore(s => s.demoMode) ? 'Exit Demo' : 'Demo Mode'}
+          </button>
+          <WsStatusBadge />
+        </div>
       </div>
     </div>
   );

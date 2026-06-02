@@ -7,7 +7,7 @@
  */
 
 import { useEffect } from 'react';
-import { startWebSocket, stopWebSocket } from '../state/signverse-store';
+import { startWebSocket, stopWebSocket, useSignVerseStore } from '../state/signverse-store';
 
 import SystemMetricsBar    from '../components/SystemMetricsBar';
 import ModeIndicator       from '../components/ModeIndicator';
@@ -18,8 +18,11 @@ import TelemetryLogFeed    from '../components/TelemetryLogFeed';
 import TrainingStatusCard  from '../components/TrainingStatusCard';
 import PipelineStatusCard  from '../components/PipelineStatusCard';
 import IngestionLauncherCard from '../components/IngestionLauncherCard';
+import DemoMode            from '../components/DemoMode';
 
 export default function DashboardPage() {
+  const demoMode = useSignVerseStore(s => s.demoMode);
+
   useEffect(() => {
     startWebSocket();
     return () => stopWebSocket();
@@ -45,33 +48,41 @@ export default function DashboardPage() {
         <SystemMetricsBar />
       </div>
 
-      {/* ── Row 2 ────────────────────────────────────────────────────── */}
-      <ModeIndicator />
-      <JointGaugePanel />
-      <AnatomySourceCard />
+      {demoMode ? (
+        <div style={{ gridColumn: '1 / -1', gridRow: '2 / span 4', animation: 'slide-in-up 0.3s var(--ease-smooth) both' }}>
+          <DemoMode />
+        </div>
+      ) : (
+        <>
+          {/* ── Row 2 ────────────────────────────────────────────────────── */}
+          <ModeIndicator />
+          <JointGaugePanel />
+          <AnatomySourceCard />
 
-      {/* ── Row 3 ────────────────────────────────────────────────────── */}
-      {/* Col 1–2: Telemetry log */}
-      <div style={{ gridColumn: '1 / 3' }}>
-        <TelemetryLogFeed />
-      </div>
+          {/* ── Row 3 ────────────────────────────────────────────────────── */}
+          {/* Col 1–2: Telemetry log */}
+          <div style={{ gridColumn: '1 / 3' }}>
+            <TelemetryLogFeed />
+          </div>
 
-      {/* Col 3: Violation feed */}
-      <ViolationAlertFeed />
+          {/* Col 3: Violation feed */}
+          <ViolationAlertFeed />
 
-      {/* ── Row 4 ────────────────────────────────────────────────────── */}
-      {/* Col 1–2: Training status */}
-      <div style={{ gridColumn: '1 / 3' }}>
-        <TrainingStatusCard />
-      </div>
+          {/* ── Row 4 ────────────────────────────────────────────────────── */}
+          {/* Col 1–2: Training status */}
+          <div style={{ gridColumn: '1 / 3' }}>
+            <TrainingStatusCard />
+          </div>
 
-      {/* Col 3: pipeline lifecycle */}
-      <PipelineStatusCard />
+          {/* Col 3: pipeline lifecycle */}
+          <PipelineStatusCard />
 
-      {/* Row 5: ingestion launcher */}
-      <div style={{ gridColumn: '1 / 3' }}>
-        <IngestionLauncherCard />
-      </div>
+          {/* Row 5: ingestion launcher */}
+          <div style={{ gridColumn: '1 / 3' }}>
+            <IngestionLauncherCard />
+          </div>
+        </>
+      )}
 
       {/* ── Footer strip ──────────────────────────────────────────────── */}
       <div
