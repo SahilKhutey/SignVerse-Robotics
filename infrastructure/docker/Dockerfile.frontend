@@ -21,6 +21,7 @@ RUN pnpm install --no-frozen-lockfile
 RUN pnpm run db:generate
 
 # Build the Next.js app (outputs to apps/dashboard-web/out due to output: 'export')
+ENV DATABASE_URL="postgresql://postgres:password@localhost:5432/db"
 RUN pnpm --filter dashboard-web run build
 
 # Stage 2: Serve the built static files with Nginx

@@ -22,11 +22,16 @@ RUN pip install --no-cache-dir \
     pyserial \
     langchain \
     langchain-community \
-    mujoco
+    mujoco \
+    scipy
 
-# Copy the core Python project
+# Copy the core Python project and new mathematical layers
 COPY core /app/core
 COPY backend /app/backend
+COPY kinematics /app/kinematics
+COPY motion_fusion /app/motion_fusion
+COPY motion_intelligence /app/motion_intelligence
+COPY packages /app/packages
 COPY start_system.py /app/start_system.py
 
 # Expose API Gateway port

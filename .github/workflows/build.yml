@@ -3,6 +3,8 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://postgres:password@localhost:5432/db"
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node
