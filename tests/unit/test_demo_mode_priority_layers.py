@@ -205,3 +205,30 @@ def test_universal_motion_format_svmf():
     assert "velocities" in payload
     assert "embeddings" in payload
     assert len(payload["embeddings"]) == 1
+
+def test_motion_compression():
+    spec_comp = importlib.util.spec_from_file_location(
+        "compression",
+        f"{SVR_ROOT}/packages/motion-format/compression.py"
+    )
+    comp_module = importlib.util.module_from_spec(spec_comp)
+    spec_comp.loader.exec_module(comp_module)
+    compress_motion_sequence = comp_module.compress_motion_sequence
+    decompress_motion_sequence = comp_module.decompress_motion_sequence
+
+    seq = [
+        {"translation": [0.0, 0.0, 0.0], "joints": {"J0": 0.0, "J1": 0.0}},
+        {"translation": [0.0501, 0.1001, 0.1501], "joints": {"J0": 0.5001, "J1": -0.2501}},  # Should be decimated under tolerance=0.01
+        {"translation": [0.1, 0.2, 0.3], "joints": {"J0": 1.0, "J1": -0.5}}
+    ]
+    
+    compressed = compress_motion_sequence(seq, tolerance=0.01)
+    # The middle frame should be decimated, leaving 2 frames
+    assert len(compressed) == 2
+    assert compressed[1]["is_keyframe"] is True
+    
+    decompressed = decompress_motion_sequence(compressed)
+    assert len(decompressed) == 2
+    assert np.allclose(decompressed[1]["translation"], [0.1, 0.2, 0.3])
+    assert np.isclose(decompressed[1]["joints"]["J0"], 1.0)
+

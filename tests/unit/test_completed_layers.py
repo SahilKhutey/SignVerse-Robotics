@@ -202,3 +202,51 @@ def test_dataset_builder_packaging():
     finally:
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
+
+def test_dataset_builder_svmf_packaging():
+    from datasets.builder import SVMFDataset
+    output_dir = f"{SVR_ROOT}/.tmp_test_completed_layers_svmf"
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+        
+    dataset_id = "test_svmf_run"
+    metadata = {"author": "SignVerse", "task": "Reach"}
+    skills = {"approach": 1.0}
+    objects = ["cube"]
+    
+    sequences = [{
+        "sequence_id": "traj_svmf_0",
+        "skeleton_graph": {"nodes": ["pelvis", "spine"]},
+        "joint_angles": {
+            "J0": [0.1, 0.2, 0.3],
+            "J1": [0.4, 0.5, 0.6],
+            "J2": [0.7, 0.8, 0.9]
+        },
+        "translation": [[0.0, 0.0, 0.0], [0.01, 0.02, 0.03], [0.1, 0.2, 0.3]],
+        "frames": [
+            {"joints": {"J0": 0.1, "J1": 0.4, "J2": 0.7}},
+            {"joints": {"J0": 0.2, "J1": 0.5, "J2": 0.8}},
+            {"joints": {"J0": 0.3, "J1": 0.6, "J2": 0.9}}
+        ]
+    }]
+    
+    try:
+        result = build_dataset(output_dir, dataset_id, metadata, sequences, objects, skills, generate_svmf=True)
+        svmf_file = os.path.join(output_dir, "svmf", "traj_svmf_0.svmf.json")
+        comp_file = os.path.join(output_dir, "svmf", "traj_svmf_0_compressed.svmf.json")
+        
+        assert os.path.exists(svmf_file)
+        assert os.path.exists(comp_file)
+        
+        # Load dataset from SVMF file
+        ds = SVMFDataset(svmf_file, normalise=False, input_dim=3, output_dim=3)
+        assert len(ds) == 3
+        obs, lbl = ds[0]
+        assert obs.shape == (3,)
+        assert lbl.shape == (3,)
+        assert np.allclose(obs.numpy(), [0.1, 0.4, 0.7])
+        assert np.allclose(lbl.numpy(), [0.1, 0.4, 0.7])
+    finally:
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+
