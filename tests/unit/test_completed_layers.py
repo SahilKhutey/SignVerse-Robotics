@@ -9,9 +9,16 @@ import shutil
 
 # ── Resolve workspace root and inject namespace paths ─────────────────────────
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_ROOT = os.path.abspath(os.path.join(TEST_DIR, "..", ".."))
-SVR_ROOT = os.path.join(WORKSPACE_ROOT, "sign-verse-robotics")
+curr = TEST_DIR
+while curr and not os.path.exists(os.path.join(curr, "packages", "motion-format", "svmf.py")):
+    parent = os.path.dirname(curr)
+    if parent == curr:
+        break
+    curr = parent
+SVR_ROOT = curr
+WORKSPACE_ROOT = os.path.dirname(SVR_ROOT)
 EDGE_RT  = os.path.join(WORKSPACE_ROOT, "robotics", "edge-runtime")
+
 
 for p in [SVR_ROOT, EDGE_RT]:
     if p not in sys.path:
@@ -25,8 +32,13 @@ if "core" not in sys.modules:
     sys.modules["core"] = core_pkg
 else:
     svr_core = os.path.join(SVR_ROOT, "core")
-    if svr_core not in sys.modules["core"].__path__:
-        sys.modules["core"].__path__.insert(0, svr_core)
+    core_path = sys.modules["core"].__path__
+    if svr_core not in core_path:
+        if hasattr(core_path, "append"):
+            core_path.append(svr_core)
+        else:
+            sys.modules["core"].__path__ = [svr_core] + list(core_path)
+
 
 # ── Dynamic Import Resolution for Hyphenated Service Paths ───────────────────
 # 1. Motion Fusion Service
