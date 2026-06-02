@@ -3,8 +3,8 @@ version: '3.8'
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.backend
     container_name: signverse_backend
     ports:
       - "8000:8000"
@@ -16,8 +16,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ../../
+      dockerfile: infrastructure/docker/Dockerfile.frontend
     container_name: signverse_frontend
     ports:
       - "5173:80"
