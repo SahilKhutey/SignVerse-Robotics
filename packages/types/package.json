@@ -1,6 +1,15 @@
 {
   "name": "@signverse/types",
   "version": "1.0.0",
-  "main": "src/index.ts",
-  "private": true
+  "main": "dist/index.js",
+  "types": "dist/src/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
 }

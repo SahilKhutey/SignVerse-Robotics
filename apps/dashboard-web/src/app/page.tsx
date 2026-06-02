@@ -16,6 +16,8 @@ import AnatomySourceCard   from '../components/AnatomySourceCard';
 import ViolationAlertFeed  from '../components/ViolationAlertFeed';
 import TelemetryLogFeed    from '../components/TelemetryLogFeed';
 import TrainingStatusCard  from '../components/TrainingStatusCard';
+import PipelineStatusCard  from '../components/PipelineStatusCard';
+import IngestionLauncherCard from '../components/IngestionLauncherCard';
 
 export default function DashboardPage() {
   useEffect(() => {
@@ -63,8 +65,13 @@ export default function DashboardPage() {
         <TrainingStatusCard />
       </div>
 
-      {/* Col 3: empty for now (future: sign prediction card) */}
-      <div />
+      {/* Col 3: pipeline lifecycle */}
+      <PipelineStatusCard />
+
+      {/* Row 5: ingestion launcher */}
+      <div style={{ gridColumn: '1 / 3' }}>
+        <IngestionLauncherCard />
+      </div>
 
       {/* ── Footer strip ──────────────────────────────────────────────── */}
       <div

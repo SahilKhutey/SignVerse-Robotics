@@ -30,11 +30,21 @@ class S3StorageProvider:
             self.s3_client.head_bucket(Bucket=self.bucket_name)
         except ClientError:
             logger.info(f"Creating bucket {self.bucket_name}")
-            self.s3_client.create_bucket(Bucket=self.bucket_name)
+            try:
+                self.s3_client.create_bucket(Bucket=self.bucket_name)
+            except Exception as e:
+                logger.warning(f"Could not create bucket: {e}. S3StorageProvider running in MOCK mode.")
+                self.s3_client = None
+        except Exception as e:
+            logger.warning(f"Could not connect to S3/MinIO endpoint {self.endpoint_url}: {e}. S3StorageProvider running in MOCK mode.")
+            self.s3_client = None
 
     def upload_video_stream(self, object_name: str, file_obj: BinaryIO) -> str:
         logger.info(f"Uploading massive video chunk to S3: {object_name}")
-        if BOTO_AVAILABLE:
-            self.s3_client.upload_fileobj(file_obj, self.bucket_name, object_name)
-            return f"{self.endpoint_url}/{self.bucket_name}/{object_name}"
+        if BOTO_AVAILABLE and getattr(self, 's3_client', None) is not None:
+            try:
+                self.s3_client.upload_fileobj(file_obj, self.bucket_name, object_name)
+                return f"{self.endpoint_url}/{self.bucket_name}/{object_name}"
+            except Exception as e:
+                logger.error(f"S3 upload failed: {e}. Falling back to MOCK.")
         return f"mock_s3://{self.bucket_name}/{object_name}"

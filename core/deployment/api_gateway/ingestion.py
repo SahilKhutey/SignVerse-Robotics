@@ -4,9 +4,11 @@ import redis
 from rq import Queue
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from core.os.utils.logger import setup_logger
 from core.os.utils.config import settings
+from core.deployment.api_gateway.pipelines import pipeline_store
+from core.pipeline import PipelineStateError
 
 logger = setup_logger("Ingestion_Router")
 
@@ -21,6 +23,23 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # Connect to Redis
 redis_conn = redis.Redis(host='localhost', port=6379)
 q_ingest = Queue('ingestion', connection=redis_conn)
+
+def fallback_disabled() -> bool:
+    return os.environ.get("SIGNVERSE_DISABLE_INGESTION_FALLBACK") == "1"
+
+
+def create_ingestion_pipeline_job(source_type: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    try:
+        job = pipeline_store.create_job(
+            metadata={
+                "source_type": source_type,
+                **metadata,
+            }
+        )
+        return job.to_dict()
+    except PipelineStateError as exc:
+        logger.error(f"Failed to create ingestion pipeline job: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to create pipeline job: {exc}")
 
 class YouTubeRequest(BaseModel):
     url: str
@@ -39,12 +58,38 @@ async def upload_video(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
         
         logger.info(f"Successfully ingested video: {file.filename}")
-        
+
+        queue_job_id = None
+        queue_mode = "redis"
+
         # Enqueue video frame extraction job on RQ
         try:
-            q_ingest.enqueue('worker.process_video_job', file_path)
+            job = q_ingest.enqueue('worker.process_video_job', file_path)
+            queue_job_id = job.id
         except Exception as e:
+            if fallback_disabled():
+                queue_job_id = "fallback_disabled"
+                queue_mode = "fallback_disabled"
+                pipeline_job = create_ingestion_pipeline_job(
+                    "video",
+                    {
+                        "filename": file.filename,
+                        "path": file_path,
+                        "queue_job_id": queue_job_id,
+                        "queue_mode": queue_mode,
+                    },
+                )
+                return {
+                    "status": "success",
+                    "filename": file.filename,
+                    "path": file_path,
+                    "job_id": queue_job_id,
+                    "pipeline_job_id": pipeline_job["job_id"],
+                    "pipeline_job": pipeline_job,
+                }
             logger.warning(f"Failed to enqueue to RQ (Redis offline?): {e}. Falling back to background thread...")
+            queue_job_id = "fallback_thread_job"
+            queue_mode = "fallback_thread"
             # Fallback: run the worker job directly in a background thread
             import threading
             try:
@@ -64,8 +109,25 @@ async def upload_video(file: UploadFile = File(...)):
                 t.start()
             except Exception as thread_err:
                 logger.error(f"Fallback thread launch failed: {thread_err}")
-            
-        return {"status": "success", "filename": file.filename, "path": file_path}
+
+        pipeline_job = create_ingestion_pipeline_job(
+            "video",
+            {
+                "filename": file.filename,
+                "path": file_path,
+                "queue_job_id": queue_job_id,
+                "queue_mode": queue_mode,
+            },
+        )
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "path": file_path,
+            "job_id": queue_job_id,
+            "pipeline_job_id": pipeline_job["job_id"],
+            "pipeline_job": pipeline_job,
+        }
     except Exception as e:
         logger.error(f"Failed to save video: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -76,18 +138,53 @@ async def ingest_youtube(req: YouTubeRequest):
         raise HTTPException(status_code=400, detail="Invalid YouTube URL")
     
     logger.info(f"Queued YouTube URL for ingestion: {req.url}")
-    
+
+    queue_job_id = None
+    queue_mode = "redis"
+
     try:
         # Enqueue youtube download job on RQ
         job = q_ingest.enqueue('worker.process_youtube_job', req.url)
+        queue_job_id = job.id
+        pipeline_job = create_ingestion_pipeline_job(
+            "youtube",
+            {
+                "url": req.url,
+                "queue_job_id": queue_job_id,
+                "queue_mode": queue_mode,
+            },
+        )
         return {
             "status": "success", 
             "message": "YouTube URL queued for processing", 
             "url": req.url,
-            "job_id": job.id
+            "job_id": queue_job_id,
+            "pipeline_job_id": pipeline_job["job_id"],
+            "pipeline_job": pipeline_job,
         }
     except Exception as e:
+        if fallback_disabled():
+            queue_job_id = "fallback_disabled"
+            queue_mode = "fallback_disabled"
+            pipeline_job = create_ingestion_pipeline_job(
+                "youtube",
+                {
+                    "url": req.url,
+                    "queue_job_id": queue_job_id,
+                    "queue_mode": queue_mode,
+                },
+            )
+            return {
+                "status": "success",
+                "message": "YouTube URL queued for processing",
+                "url": req.url,
+                "job_id": queue_job_id,
+                "pipeline_job_id": pipeline_job["job_id"],
+                "pipeline_job": pipeline_job,
+            }
         logger.warning(f"Failed to enqueue to RQ (Redis offline?): {e}. Falling back to background thread...")
+        queue_job_id = "fallback_thread_job"
+        queue_mode = "fallback_thread"
         # Fallback: run the worker job directly in a background thread
         import threading
         try:
@@ -105,12 +202,23 @@ async def ingest_youtube(req: YouTubeRequest):
             
             t = threading.Thread(target=ingest_worker.process_youtube_job, args=(req.url,), daemon=True)
             t.start()
-            
+
+            pipeline_job = create_ingestion_pipeline_job(
+                "youtube",
+                {
+                    "url": req.url,
+                    "queue_job_id": queue_job_id,
+                    "queue_mode": queue_mode,
+                },
+            )
+
             return {
                 "status": "success", 
                 "message": "YouTube URL queued for processing", 
                 "url": req.url,
-                "job_id": "fallback_thread_job"
+                "job_id": queue_job_id,
+                "pipeline_job_id": pipeline_job["job_id"],
+                "pipeline_job": pipeline_job,
             }
         except Exception as thread_err:
             logger.error(f"Fallback thread launch failed: {thread_err}")
@@ -127,13 +235,39 @@ async def upload_image(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
             
         logger.info(f"Successfully ingested image: {file.filename}")
-        
+
+        queue_job_id = None
+        queue_mode = "redis"
+
         # Enqueue image frame perception job on RQ
         try:
             q_percept = Queue('perception', connection=redis_conn)
-            q_percept.enqueue('worker.process_frame_job', file_path, 0, 1, file_path)
+            job = q_percept.enqueue('worker.process_frame_job', file_path, 0, 1, file_path)
+            queue_job_id = job.id
         except Exception as e:
+            if fallback_disabled():
+                queue_job_id = "fallback_disabled"
+                queue_mode = "fallback_disabled"
+                pipeline_job = create_ingestion_pipeline_job(
+                    "image",
+                    {
+                        "filename": file.filename,
+                        "path": file_path,
+                        "queue_job_id": queue_job_id,
+                        "queue_mode": queue_mode,
+                    },
+                )
+                return {
+                    "status": "success",
+                    "filename": file.filename,
+                    "path": file_path,
+                    "job_id": queue_job_id,
+                    "pipeline_job_id": pipeline_job["job_id"],
+                    "pipeline_job": pipeline_job,
+                }
             logger.warning(f"Failed to enqueue image to RQ (Redis offline?): {e}. Falling back to background thread...")
+            queue_job_id = "fallback_thread_job"
+            queue_mode = "fallback_thread"
             # Fallback: run the worker job directly in a background thread
             import threading
             try:
@@ -153,8 +287,25 @@ async def upload_image(file: UploadFile = File(...)):
                 t.start()
             except Exception as thread_err:
                 logger.error(f"Fallback thread launch failed: {thread_err}")
-                
-        return {"status": "success", "filename": file.filename, "path": file_path}
+
+        pipeline_job = create_ingestion_pipeline_job(
+            "image",
+            {
+                "filename": file.filename,
+                "path": file_path,
+                "queue_job_id": queue_job_id,
+                "queue_mode": queue_mode,
+            },
+        )
+
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "path": file_path,
+            "job_id": queue_job_id,
+            "pipeline_job_id": pipeline_job["job_id"],
+            "pipeline_job": pipeline_job,
+        }
     except Exception as e:
         logger.error(f"Failed to save image: {e}")
         raise HTTPException(status_code=500, detail=str(e))

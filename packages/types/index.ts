@@ -1,3 +1,5 @@
+export * from './src';
+
 // Unified schema definitions across Frontends and Backends
 export interface RobotTelemetry {
   robot_id: string;

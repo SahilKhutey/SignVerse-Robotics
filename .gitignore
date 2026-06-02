@@ -10,6 +10,7 @@ build/
 *.log
 *.tsbuildinfo
 .pytest_cache/
+.tmp_test_artifacts/
 
 # Framework and task-runner caches
 .turbo/

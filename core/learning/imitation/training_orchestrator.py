@@ -27,6 +27,7 @@ Usage
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -54,6 +55,7 @@ class OrchestratorConfig:
     trainer_config: BCTrainerConfig = None  # type: ignore[assignment]
 
     def __post_init__(self):
+        self.db_path = os.environ.get("SIGNVERSE_TELEOP_DB_PATH", self.db_path)
         if self.trainer_config is None:
             self.trainer_config = BCTrainerConfig(
                 max_epochs=50,     # shorter for online runs

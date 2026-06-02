@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -97,12 +97,24 @@ class BehaviorCloningTrainer:
     #   models/checkpoints/policy_best.pth
     """
 
-    def __init__(self, config: Optional[BCTrainerConfig] = None):
-        self.cfg     = config or BCTrainerConfig()
+    def __init__(
+        self,
+        model: Optional[nn.Module | BCTrainerConfig] = None,
+        config: Optional[BCTrainerConfig] = None,
+        learning_rate: Optional[float] = None,
+    ):
+        if isinstance(model, BCTrainerConfig):
+            config = model
+            model = None
+
+        self.cfg = config or BCTrainerConfig()
+        if learning_rate is not None:
+            self.cfg.learning_rate = learning_rate
+
         self.ckpt_dir = Path(self.cfg.checkpoint_dir)
         self.ckpt_dir.mkdir(parents=True, exist_ok=True)
 
-        self.model     = BehaviorCloningMLP(
+        self.model = model or BehaviorCloningMLP(
             input_dim=self.cfg.input_dim,
             hidden_dim=self.cfg.hidden_dim,
             output_dim=self.cfg.output_dim,

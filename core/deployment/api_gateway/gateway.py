@@ -44,6 +44,8 @@ from core.deployment.api_gateway.datasets    import router as datasets_router
 from core.deployment.api_gateway.timeline    import router as timeline_router
 from core.deployment.api_gateway.retargeting import router as retargeting_router
 from core.deployment.api_gateway.training    import router as training_router
+from core.deployment.api_gateway.schemas     import router as schemas_router
+from core.deployment.api_gateway.pipelines   import router as pipelines_router
 
 try:
     import psutil
@@ -102,7 +104,7 @@ def _measured_fps() -> float:
 
 # ── Kernel tick loop (background thread) ─────────────────────────────────────
 
-def _kernel_loop(kernel: SignVerseKernel):
+def _kernel_loop(kernel: SignVerseKernel, loop: asyncio.AbstractEventLoop):
     """
     Runs kernel.tick() as fast as possible.
     Broadcasts a SYSTEM_METRICS frame to every connected WS client
@@ -125,8 +127,6 @@ def _kernel_loop(kernel: SignVerseKernel):
             with _client_queues_lock:
                 for dq in dead:
                     _client_queues.discard(dq)
-
-    loop: asyncio.AbstractEventLoop | None = None
 
     while not getattr(kernel, "is_shutdown", False):
         t0 = time.perf_counter()
@@ -160,14 +160,7 @@ def _kernel_loop(kernel: SignVerseKernel):
             }
 
             # Schedule broadcast on the event loop
-            if loop is None or loop.is_closed():
-                # Acquire loop reference once it's running
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = None
-
-            if loop and loop.is_running():
+            if loop.is_running():
                 asyncio.run_coroutine_threadsafe(_broadcast(telemetry), loop)
 
         elapsed = time.perf_counter() - t0
@@ -190,9 +183,10 @@ async def lifespan(app: FastAPI):
     app.state.reasoner   = reasoner_
     app.state.kernel     = kernel_
 
-    # Start tick loop thread
+    # Start tick loop thread with the active event loop
+    loop = asyncio.get_running_loop()
     tick_thread = threading.Thread(
-        target=_kernel_loop, args=(kernel_,), name="kernel-tick", daemon=True
+        target=_kernel_loop, args=(kernel_, loop), name="kernel-tick", daemon=True
     )
     tick_thread.start()
 
@@ -237,6 +231,8 @@ app.include_router(datasets_router,    dependencies=[Depends(verify_api_key)])
 app.include_router(timeline_router,    dependencies=[Depends(verify_api_key)])
 app.include_router(retargeting_router, dependencies=[Depends(verify_api_key)])
 app.include_router(training_router,    dependencies=[Depends(verify_api_key)])
+app.include_router(schemas_router,     dependencies=[Depends(verify_api_key)])
+app.include_router(pipelines_router,   dependencies=[Depends(verify_api_key)])
 
 
 # ── REST endpoints ────────────────────────────────────────────────────────────

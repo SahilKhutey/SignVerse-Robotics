@@ -8,9 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.4
+        version: 9.39.4
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
+      '@typescript-eslint/parser':
+        specifier: ^8.48.1
+        version: 8.60.0(eslint@9.39.4(jiti@1.21.7))(typescript@5.9.3)
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@1.21.7)
@@ -81,6 +87,9 @@ importers:
       '@react-three/fiber':
         specifier: ^8.18.0
         version: 8.18.0(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(three@0.175.0)
+      api-contracts:
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -320,12 +329,19 @@ importers:
       three:
         specifier: ^0.164.0
         version: 0.164.1
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   packages/api-contracts:
     dependencies:
       react:
         specifier: ^18.3.1
         version: 18.3.1
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/react':
         specifier: ^18.3.17
@@ -344,14 +360,32 @@ importers:
       zustand:
         specifier: ^4.5.2
         version: 4.5.7(@types/react@18.3.29)(react@18.3.1)
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
-  packages/types: {}
+  packages/types:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   packages/ui:
     dependencies:
+      '@signverse/state':
+        specifier: workspace:*
+        version: link:../state
       react:
         specifier: ^18.2.0
         version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.17
+        version: 18.3.29
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   robotics/edge-runtime:
     dependencies:
@@ -369,7 +403,18 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
 
-  sdk/core: {}
+  sdk/core:
+    dependencies:
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.17
+        version: 18.3.29
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   services/agent-service: {}
 

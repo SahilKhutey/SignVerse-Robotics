@@ -12,6 +12,7 @@
  */
 
 import { create } from 'zustand';
+import { SignVersePipelineClient, type PipelineJobSnapshot } from 'api-contracts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,11 +64,23 @@ export interface LogEntry {
 
 export const WS_URL          = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000/ws/telemetry';
 export const API_URL         = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+export const API_KEY         = process.env.NEXT_PUBLIC_API_KEY ?? 'signverse_local_dev_key';
 const MAX_LOG_LINES           = 60;
 const MAX_VIOLATIONS          = 100;
 const BACKOFF_BASE_MS         = 1000;
 const BACKOFF_MAX_MS          = 30_000;
 const STALE_THRESHOLD_MS      = 5_000;   // mark stream stale after 5s of no frames
+const REST_POLL_INTERVAL_MS   = 3_000;
+
+const API_HEADERS: HeadersInit = {
+  Accept: 'application/json',
+  ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+};
+
+const pipelineClient = new SignVersePipelineClient({
+  baseUrl: API_URL,
+  apiKey: API_KEY,
+});
 
 export const JOINT_LIMITS: Record<string, [number, number]> = {
   J0: [0,            Math.PI / 2],
@@ -102,12 +115,21 @@ interface SignVerseState {
   // Training stats (polled from REST)
   trainingStats: Record<string, unknown> | null;
 
+  // Pipeline jobs (polled from REST)
+  pipelineJobs: PipelineJobSnapshot[];
+  pipelineStatus: 'idle' | 'loading' | 'ready' | 'error';
+  pipelineError: string | null;
+  lastPipelinePollTs: number;
+
   // Internal setters
   _setFrame:         (f: TelemetryFrame) => void;
   _setWsStatus:      (s: SignVerseState['wsStatus']) => void;
   _setLatency:       (ms: number) => void;
   _addViolations:    (vs: ViolationRecord[]) => void;
   _setTrainingStats: (s: Record<string, unknown>) => void;
+  _setPipelineLoading: () => void;
+  _setPipelineJobs: (jobs: PipelineJobSnapshot[]) => void;
+  _setPipelineError: (message: string) => void;
 }
 
 export const useSignVerseStore = create<SignVerseState>((set) => ({
@@ -119,6 +141,10 @@ export const useSignVerseStore = create<SignVerseState>((set) => ({
   log:           [],
   violations:    [],
   trainingStats: null,
+  pipelineJobs: [],
+  pipelineStatus: 'idle',
+  pipelineError: null,
+  lastPipelinePollTs: 0,
 
   _setFrame: (f) => set((s) => {
     const entry: LogEntry = {
@@ -149,6 +175,18 @@ export const useSignVerseStore = create<SignVerseState>((set) => ({
   })),
 
   _setTrainingStats: (trainingStats) => set({ trainingStats }),
+  _setPipelineLoading: () => set({ pipelineStatus: 'loading', pipelineError: null }),
+  _setPipelineJobs: (jobs) => set({
+    pipelineJobs: [...jobs].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)),
+    pipelineStatus: 'ready',
+    pipelineError: null,
+    lastPipelinePollTs: Date.now(),
+  }),
+  _setPipelineError: (message) => set({
+    pipelineStatus: 'error',
+    pipelineError: message,
+    lastPipelinePollTs: Date.now(),
+  }),
 }));
 
 // ── Stale stream detector (derived selector) ──────────────────────────────────
@@ -165,6 +203,7 @@ let _reconnectTimer:  ReturnType<typeof setTimeout> | null = null;
 let _pingTimer:       ReturnType<typeof setInterval> | null = null;
 let _pollTimer:       ReturnType<typeof setInterval> | null = null;
 let _attempt:         number = 0;
+let _pipelinePollInFlight = false;
 
 /**
  * Exponential backoff with ±20% jitter, capped at BACKOFF_MAX_MS.
@@ -250,7 +289,7 @@ function _scheduleReconnect() {
 
 async function _pollTrainingStats() {
   try {
-    const res = await fetch(`${API_URL}/api/training/status`);
+    const res = await fetch(`${API_URL}/api/training/status`, { headers: API_HEADERS });
     if (res.ok) {
       const data = await res.json();
       useSignVerseStore.getState()._setTrainingStats(data.stats ?? {});
@@ -258,13 +297,46 @@ async function _pollTrainingStats() {
   } catch { /* gateway not available */ }
 }
 
+async function _pollPipelineJobs() {
+  if (_pipelinePollInFlight) return;
+  _pipelinePollInFlight = true;
+
+  const store = useSignVerseStore.getState();
+  if (store.pipelineStatus === 'idle') store._setPipelineLoading();
+
+  try {
+    const data = await pipelineClient.listJobs();
+    useSignVerseStore.getState()._setPipelineJobs(data.jobs);
+  } catch (error) {
+    useSignVerseStore.getState()._setPipelineError(
+      error instanceof Error ? error.message : 'Pipeline polling failed',
+    );
+  } finally {
+    _pipelinePollInFlight = false;
+  }
+}
+
+function _startRestPoller() {
+  if (_pollTimer) clearInterval(_pollTimer);
+  void _pollTrainingStats();
+  void _pollPipelineJobs();
+  _pollTimer = setInterval(() => {
+    void _pollTrainingStats();
+    void _pollPipelineJobs();
+  }, REST_POLL_INTERVAL_MS);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export function startWebSocket() {
   if (typeof window === 'undefined') return;
   _connect();
-  // Poll training stats every 3s
-  _pollTimer = setInterval(_pollTrainingStats, 3_000);
+  _startRestPoller();
+}
+
+export function refreshPipelineJobs() {
+  if (typeof window === 'undefined') return Promise.resolve();
+  return _pollPipelineJobs();
 }
 
 export function stopWebSocket() {
