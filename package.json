@@ -8,9 +8,9 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "clean": "turbo run clean",
-    "db:generate": "pnpm --filter @shared/database prisma generate",
-    "db:migrate": "pnpm --filter @shared/database prisma migrate dev",
-    "db:studio": "pnpm --filter @shared/database prisma studio"
+    "db:generate": "pnpm --filter @shared/database run db:generate",
+    "db:migrate": "pnpm --filter @shared/database run db:migrate",
+    "db:studio": "pnpm --filter @shared/database run db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

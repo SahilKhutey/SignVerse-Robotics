@@ -24,3 +24,7 @@ exports/
 tests/exports/
 core/datasets/processed/
 core/datasets/raw_uploads/
+
+# Next.js static exports
+out/
+**/out/
