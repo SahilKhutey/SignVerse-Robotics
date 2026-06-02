@@ -7,7 +7,7 @@ import logging
 import multiprocessing
 import sys
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 import importlib.util
 
