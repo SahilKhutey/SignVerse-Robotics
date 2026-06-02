@@ -59,18 +59,18 @@ def process_export_job(payload_json):
             with open(file_path, "w") as f:
                 f.write(xml_str)
         elif fmt == "fbx":
-            bvh_file = bvh_engine.export(seq_id, data)
             output_dir = "exports/fbx"
             os.makedirs(output_dir, exist_ok=True)
             file_path = os.path.join(output_dir, f"{seq_id}.fbx")
             try:
                 from blender.automation import automate_blender_retargeting
+                bvh_file = bvh_engine.export(seq_id, data)
                 automate_blender_retargeting(bvh_file, file_path)
             except Exception as e:
                 print(f"Blender/bpy background automation bypassed/failed: {e}")
-                # Mock create an empty file so step succeeds if bpy is missing on the runner
-                with open(file_path, "w") as f:
-                    f.write("; FBX Bypassed - bpy not present")
+                print("Falling back to native core BlenderExporter for ASCII FBX.")
+                from core.robotics.simulation.blender_exporter import BlenderExporter
+                BlenderExporter().export(data, file_path, format_type="fbx")
         else:
             raise Exception(f"Unsupported format: {fmt}")
             
