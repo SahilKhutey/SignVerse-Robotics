@@ -138,7 +138,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       if (get().isListening) {
         try {
           recognitionInstance.abort();
-        } catch (e) {}
+        } catch (e) {
+          // ignore abort errors
+        }
       }
       
       set({ transcript: '', error: null, isPushToTalk: isPtt, confidence: 0, interimTranscript: '' });
@@ -153,7 +155,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
       if (!recognitionInstance) return;
       try {
         recognitionInstance.stop();
-      } catch (err) {}
+      } catch (err) {
+        // ignore stop errors
+      }
     },
 
     clearTranscript: () => {

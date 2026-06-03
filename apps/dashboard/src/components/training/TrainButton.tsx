@@ -81,7 +81,9 @@ export default function TrainButton({
         },
         body: JSON.stringify({ action: 'checkpoint' }) // mock call
       });
-    } catch {}
+    } catch {
+      // Ignore API errors for fallback
+    }
     addLog('🛑 Training run halted manually by operator.', 'warn');
     onTrainingHalted();
   };

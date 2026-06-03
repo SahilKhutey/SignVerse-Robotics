@@ -42,7 +42,6 @@ export default function CommandUI() {
       handleSubmit();
     }, 800);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice.transcript]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
