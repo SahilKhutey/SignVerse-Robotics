@@ -1,5 +1,4 @@
 packages:
-  - "apps/*"
   - "backend/*"
   - "robotics/*"
   - "ai/*"
