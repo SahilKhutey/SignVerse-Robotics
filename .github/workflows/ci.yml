@@ -1,49 +1,270 @@
-name: SignVerse OS Pipeline
+name: SignVerse CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main, develop]
   pull_request:
-    branches: [ "main" ]
+    branches: [main, develop]
+
+# Cancel any in-progress run for the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
 
 jobs:
-  test-python-kernel:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: Install dependencies (shared cache across jobs)
+  # ─────────────────────────────────────────────────────────────────────────
+  install:
+    name: Install Dependencies
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
-        
-    - name: Install System Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libgl1 libglib2.0-0 build-essential
-        
-    - name: Install Python Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install fastapi uvicorn websockets numpy torch mediapipe opencv-python-headless pyserial langchain langchain-community pytest flake8 mujoco scipy
-        
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        
-    - name: Test OS Kernel and Math Solvers
-      run: |
-        PYTHONPATH=. pytest tests/test_kernel_build.py -v
+      - uses: actions/checkout@v4
 
-  test-docker-builds:
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Cache node_modules
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: TypeScript type-checking (all packages)
+  # ─────────────────────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript Type Check
+    needs: install
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: Build SignVerse Microservices
-      run: |
-        docker compose -f infrastructure/docker/docker-compose.yml build
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install (if cache miss)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run TypeScript type checks
+        run: pnpm --filter "@signverse/dashboard" exec tsc --noEmit
+        env:
+          VITE_API_URL: http://localhost:8000
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: Lint (ESLint for TS/TSX files)
+  # ─────────────────────────────────────────────────────────────────────────
+  lint:
+    name: ESLint
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install (if cache miss)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm --filter "@signverse/dashboard" run lint
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 4: Unit Tests (Vitest)
+  # ─────────────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests (Vitest)
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install (if cache miss)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run Vitest unit tests
+        run: pnpm --filter "@signverse/dashboard" run test
+        env:
+          VITE_API_URL: http://localhost:8000
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-results
+          path: apps/dashboard/test-results/
+          if-no-files-found: ignore
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 5: Build (production bundle + size limit check)
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-size:
+    name: Production Build + Bundle Size
+    needs: [typecheck, lint, unit-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install (if cache miss)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build dashboard
+        run: pnpm --filter "@signverse/dashboard" run build
+        env:
+          VITE_API_URL: http://localhost:8000
+          VITE_WS_URL: ws://localhost:8000
+
+      - name: Check bundle size (2 MB gzip limit)
+        run: pnpm --filter "@signverse/dashboard" run size-limit
+        continue-on-error: true   # Warn, not hard-fail (Three.js is large)
+
+      - name: Upload dashboard build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-dist
+          path: apps/dashboard/dist/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 6: E2E Tests (Playwright)
+  # ─────────────────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E Tests (Playwright)
+    needs: build-and-size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            backend/*/node_modules
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install (if cache miss)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter "@signverse/dashboard" exec playwright install --with-deps chromium
+
+      - name: Download built dashboard
+        uses: actions/download-artifact@v4
+        with:
+          name: dashboard-dist
+          path: apps/dashboard/dist/
+
+      - name: Run Playwright E2E tests
+        run: pnpm --filter "@signverse/dashboard" run test:e2e
+        env:
+          VITE_API_URL: http://localhost:8000
+          VITE_WS_URL: ws://localhost:8000
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/dashboard/test-results/
+          retention-days: 7

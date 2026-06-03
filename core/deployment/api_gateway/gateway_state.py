@@ -14,8 +14,12 @@ if TYPE_CHECKING:
 # These are populated by gateway.py at startup before any request arrives
 kernel: "SignVerseKernel | None" = None
 
+# Active sharing sessions: token -> {"created_at": float, "observers": dict, "operator_ws": WebSocket}
+active_shares: dict = {}
+
 
 def get_kernel() -> "SignVerseKernel":
     if kernel is None:
         raise RuntimeError("Kernel not initialised — gateway_state.kernel must be set at startup")
     return kernel
+

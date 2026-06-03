@@ -2,15 +2,72 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyWebsocket from "@fastify/websocket";
+import { Writable } from "node:stream";
 import v1Routes from "./routes/v1/index.js";
 
+// ─── Structured Log Ring Buffer ───────────────────────────────────────────────
+// Captures up to 200 structured log entries emitted by Fastify/Pino.
+// The SSE endpoint replays these to any subscriber on connect, then
+// pushes subsequent entries in real-time.
+const LOG_BUFFER_MAX = 200;
+const logBuffer: Record<string, unknown>[] = [];
+
+// Active SSE response objects keyed by a monotonic ID
+const sseClients = new Map<number, any>();
+let sseClientIdCounter = 0;
+
+function pushLog(entry: Record<string, unknown>) {
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_BUFFER_MAX) logBuffer.shift();
+  const data = `data: ${JSON.stringify(entry)}\n\n`;
+  for (const reply of sseClients.values()) {
+    try { reply.raw.write(data); } catch { /* client disconnected */ }
+  }
+}
+
+// Custom Pino destination stream — every JSON log line is parsed and routed
+const logCapture = new Writable({
+  write(chunk, _enc, cb) {
+    try {
+      const line = chunk.toString().trim();
+      if (line) {
+        const obj = JSON.parse(line) as Record<string, unknown>;
+        // Normalise to a shape SystemPage.tsx expects
+        const entry: Record<string, unknown> = {
+          timestamp: obj.time
+            ? new Date(obj.time as number).toISOString()
+            : new Date().toISOString(),
+          level: obj.level === 30 ? 'info'
+               : obj.level === 40 ? 'warn'
+               : obj.level === 50 ? 'error'
+               : obj.level === 60 ? 'fatal'
+               : 'debug',
+          event: obj.msg ?? obj.message ?? '',
+          ...(obj.correlationId ? { correlation_id: obj.correlationId } : {}),
+          service: 'api-gateway',
+        };
+        pushLog(entry);
+      }
+    } catch { /* non-JSON pino-pretty lines — ignore */ }
+    cb();
+  },
+});
+
+// Build Fastify with a multi-stream logger so we keep pretty-printing in dev
+// while also capturing JSON for the SSE buffer.
 const server = Fastify({
   logger: {
     level: process.env.LOG_LEVEL || "info",
-    transport:
-      process.env.NODE_ENV !== "production"
-        ? { target: "pino-pretty", options: { colorize: true } }
-        : undefined,
+    stream: process.env.NODE_ENV !== "production"
+      // In dev: write both to stdout (pretty) and to our capture stream
+      ? {
+          write(msg: string) {
+            process.stdout.write(msg);
+            logCapture.write(msg);
+          },
+        }
+      // In production: capture only
+      : logCapture,
   },
 });
 
@@ -272,6 +329,45 @@ server.get(
     });
   }
 );
+
+// ─── SSE: Structured Log Stream ──────────────────────────────────────────────
+// GET /api/system/logs/stream — consumed by SystemPage.tsx via EventSource.
+// On connect: replay buffered entries, then push new entries in real-time.
+server.get("/api/system/logs/stream", async (request, reply) => {
+  const clientId = ++sseClientIdCounter;
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",         // disable Nginx buffering for SSE
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+
+  // Replay buffered log entries
+  for (const entry of logBuffer) {
+    reply.raw.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+
+  // Register for future entries
+  sseClients.set(clientId, reply);
+
+  server.log.info({ correlationId: `sse-${clientId}` }, "SSE log stream client connected");
+
+  // Keepalive comment every 15 seconds to prevent proxy timeouts
+  const keepalive = setInterval(() => {
+    try { reply.raw.write(`: ping\n\n`); } catch { clearInterval(keepalive); }
+  }, 15_000);
+
+  request.raw.on("close", () => {
+    clearInterval(keepalive);
+    sseClients.delete(clientId);
+    server.log.info({ correlationId: `sse-${clientId}` }, "SSE log stream client disconnected");
+  });
+
+  // Prevent Fastify from auto-closing the response
+  return reply;
+});
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 server.setNotFoundHandler((_req, reply) => {

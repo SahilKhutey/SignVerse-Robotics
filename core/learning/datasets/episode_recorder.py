@@ -48,18 +48,20 @@ CREATE TABLE IF NOT EXISTS episodes (
     session_id  TEXT NOT NULL,
     started_at  REAL NOT NULL,
     ended_at    REAL,
-    frame_count INTEGER DEFAULT 0
+    frame_count INTEGER DEFAULT 0,
+    is_fatigued INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS frames (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    episode_id  TEXT NOT NULL,
-    ts          REAL NOT NULL,
-    obs_json    TEXT,         -- flattened hand landmark vector (63 floats)
-    action_json TEXT,         -- predicted joint angles [J0, J1, J2]
-    expert_json TEXT,         -- retargeted / expert angles (BC label)
-    mode        TEXT,
-    reward      REAL,
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode_id    TEXT NOT NULL,
+    ts            REAL NOT NULL,
+    obs_json      TEXT,         -- flattened hand landmark vector (63 floats)
+    action_json   TEXT,         -- predicted joint angles [J0, J1, J2]
+    expert_json   TEXT,         -- retargeted / expert angles (BC label)
+    mode          TEXT,
+    reward        REAL,
+    fatigue_score REAL DEFAULT 0.0,
     FOREIGN KEY (episode_id) REFERENCES episodes(id)
 );
 
@@ -78,6 +80,7 @@ class FrameRecord:
     expert:     Optional[np.ndarray]  # (3,)  BC label
     mode:       str
     reward:     float
+    fatigue_score: float = 0.0
 
 
 # ── Recorder ──────────────────────────────────────────────────────────────────
@@ -117,6 +120,9 @@ class EpisodeRecorder:
         self._prev_action: Optional[np.ndarray] = None
         self._lock           = threading.Lock()
 
+        self._is_paused      = False
+        self._fatigued_flag  = False
+
         self._total_frames   = 0
         self._dropped_frames = 0
 
@@ -152,6 +158,8 @@ class EpisodeRecorder:
         with self._lock:
             self._episode_id  = str(uuid.uuid4())
             self._prev_action = None
+            self._is_paused   = False
+            self._fatigued_flag = False
 
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
@@ -162,6 +170,28 @@ class EpisodeRecorder:
 
         log.debug("[EpisodeRecorder] begin episode=%s", self._episode_id)
         return self._episode_id
+
+    def pause_episode(self):
+        """Pauses frame recording for the current episode."""
+        with self._lock:
+            self._is_paused = True
+            self._fatigued_flag = True
+            eid = self._episode_id
+
+        if eid is not None:
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute("UPDATE episodes SET is_fatigued = 1 WHERE id = ?", (eid,))
+                    conn.commit()
+            except Exception as e:
+                log.error(f"[EpisodeRecorder] Failed to flag episode as fatigued in DB: {e}")
+        log.info("[EpisodeRecorder] paused episode=%s", eid)
+
+    def resume_episode(self):
+        """Resumes frame recording for the current episode."""
+        with self._lock:
+            self._is_paused = False
+        log.info("[EpisodeRecorder] resumed episode=%s", self._episode_id)
 
     def end_episode(self):
         """Mark the current episode as complete."""
@@ -191,6 +221,7 @@ class EpisodeRecorder:
         action: np.ndarray,
         expert: Optional[np.ndarray] = None,
         mode:   str = "retargeted",
+        fatigue_score: float = 0.0,
     ) -> Optional[RewardBreakdown]:
         """
         Record one frame and compute its shaped reward.
@@ -201,16 +232,18 @@ class EpisodeRecorder:
         action : (3,)  predicted joint angles
         expert : (3,)  expert / retargeted joint angles (BC label)
         mode   : inference mode string
+        fatigue_score : calculated operator fatigue score
 
         Returns
         -------
-        RewardBreakdown or None if episode not started.
+        RewardBreakdown or None if episode not started or paused.
         """
         with self._lock:
             eid        = self._episode_id
             prev_act   = self._prev_action
+            is_paused  = self._is_paused
 
-        if eid is None:
+        if eid is None or is_paused:
             return None
 
         obs    = np.asarray(obs, dtype=np.float32).flatten()[:63]
@@ -231,6 +264,7 @@ class EpisodeRecorder:
             expert=expert,
             mode=mode,
             reward=breakdown.total,
+            fatigue_score=fatigue_score,
         )
 
         try:
@@ -261,6 +295,21 @@ class EpisodeRecorder:
             conn.executescript(_DDL)
             conn.commit()
 
+        # Database migrations for existing databases
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("ALTER TABLE episodes ADD COLUMN is_fatigued INTEGER DEFAULT 0")
+                conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("ALTER TABLE frames ADD COLUMN fatigue_score REAL DEFAULT 0.0")
+                conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
     def _writer_loop(self):
         """Background thread: drain queue and batch-insert into SQLite."""
         while not self._stop_event.is_set():
@@ -289,6 +338,7 @@ class EpisodeRecorder:
                 json.dumps(f.expert.tolist()) if f.expert is not None else None,
                 f.mode,
                 f.reward,
+                f.fatigue_score,
             )
             for f in batch
         ]
@@ -296,8 +346,8 @@ class EpisodeRecorder:
         try:
             with sqlite3.connect(self.db_path, timeout=10.0) as conn:
                 conn.executemany(
-                    "INSERT INTO frames(episode_id,ts,obs_json,action_json,expert_json,mode,reward)"
-                    " VALUES (?,?,?,?,?,?,?)",
+                    "INSERT INTO frames(episode_id,ts,obs_json,action_json,expert_json,mode,reward,fatigue_score)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
                     rows,
                 )
                 conn.commit()

@@ -20,7 +20,7 @@ build/
 
 # Generated clients and local artifacts
 shared/database/src/generated/
-exports/
+/exports/
 tests/exports/
 core/datasets/processed/
 core/datasets/raw_uploads/

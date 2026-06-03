@@ -1,37 +1,31 @@
-# Stage 1: Build the React/Next.js Application
-FROM node:20-alpine AS builder
-
+# Stage 1: Base image
+FROM node:20-alpine AS base
 WORKDIR /app
-
-# Install pnpm
 RUN npm install -g pnpm
 
-# Copy monorepo configuration files
+# Copy pnpm workspace configuration and dependencies metadata
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc tsconfig.base.json ./
+COPY packages/shared-types ./packages/shared-types
+COPY apps/dashboard/package.json ./apps/dashboard/package.json
 
-# Copy packages and dashboard source code (exclude node_modules via .dockerignore)
-COPY apps/dashboard-web ./apps/dashboard-web
-COPY shared/database ./shared/database
-COPY packages ./packages
-
-# Install dependencies for the workspace
+# Install dependencies
 RUN pnpm install --no-frozen-lockfile
 
-# Generate Prisma client for `@shared/database`
-RUN pnpm run db:generate
+# Copy dashboard source code
+COPY apps/dashboard ./apps/dashboard
 
-# Build the Next.js app (outputs to apps/dashboard-web/out due to output: 'export')
-ENV DATABASE_URL="postgresql://postgres:password@localhost:5432/db"
-RUN pnpm --filter dashboard-web run build
+# Stage 2: Development server (Vite)
+FROM base AS development
+EXPOSE 5173
+CMD ["pnpm", "--filter", "@signverse/dashboard", "run", "dev", "--host"]
 
-# Stage 2: Serve the built static files with Nginx
-FROM nginx:alpine
+# Stage 3: Builder for production
+FROM base AS builder
+RUN pnpm --filter @signverse/dashboard run build
 
-# Copy the build output to replace the default nginx contents
-COPY --from=builder /app/apps/dashboard-web/out /usr/share/nginx/html
-
-# Expose port 80
+# Stage 4: Production Nginx server
+FROM nginx:alpine AS production
+COPY infrastructure/docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/apps/dashboard/dist /usr/share/nginx/html
 EXPOSE 80
-
-# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

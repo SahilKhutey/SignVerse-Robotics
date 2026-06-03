@@ -1,44 +1,59 @@
-FROM python:3.10-slim
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1: Dependency install
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN npm install -g pnpm
 
-# Install system dependencies required for OpenCV, PyTorch, and MediaPipe
-RUN apt-get update && apt-get install -y \
-    libgl1 \
-    libglib2.0-0 \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Copy monorepo manifests
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc tsconfig.base.json ./
+
+# Copy shared workspace packages that api-gateway depends on
+COPY packages/shared-events    ./packages/shared-events
+COPY packages/shared-security  ./packages/shared-security
+COPY packages/shared-observability ./packages/shared-observability
+
+# Copy api-gateway package manifest first for layer cache
+COPY backend/api-gateway/package.json ./backend/api-gateway/package.json
+
+# Install all workspace dependencies
+RUN pnpm install --no-frozen-lockfile
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Build (TypeScript → JavaScript)
+# ─────────────────────────────────────────────────────────────────────────────
+FROM base AS builder
+
+# Copy gateway source
+COPY backend/api-gateway ./backend/api-gateway
+
+# Compile TypeScript
+RUN pnpm --filter @signverse/api-gateway run build
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 3: Production runtime (slim)
+# ─────────────────────────────────────────────────────────────────────────────
+FROM node:20-alpine AS production
 
 WORKDIR /app
+RUN npm install -g pnpm
 
-# Copy requirements if available, otherwise just install the known stack
-# Since requirements.txt might not exist yet, we install core directly
-RUN pip install --no-cache-dir \
-    fastapi \
-    uvicorn \
-    websockets \
-    numpy \
-    torch \
-    mediapipe \
-    opencv-python-headless \
-    pyserial \
-    langchain \
-    langchain-community \
-    mujoco \
-    scipy
+# Copy monorepo shell for pnpm resolution
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --from=base /app/packages ./packages
+COPY backend/api-gateway/package.json ./backend/api-gateway/package.json
 
-# Copy the core Python project and new mathematical layers
-COPY core /app/core
-COPY backend /app/backend
-COPY kinematics /app/kinematics
-COPY motion_fusion /app/motion_fusion
-COPY motion_intelligence /app/motion_intelligence
-COPY packages /app/packages
-COPY start_system.py /app/start_system.py
+# Install production-only deps
+RUN pnpm install --prod --no-frozen-lockfile
 
-# Expose API Gateway port
+# Copy compiled gateway bundle
+COPY --from=builder /app/backend/api-gateway/dist ./backend/api-gateway/dist
+
+# Expose the gateway port
 EXPOSE 8000
 
-# Set Python Path
-ENV PYTHONPATH=/app
+ENV NODE_ENV=production
+ENV PORT=8000
+ENV HOST=0.0.0.0
 
-# Start the API Gateway directly via uvicorn for production
-CMD ["uvicorn", "core.deployment.api_gateway.gateway:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["node", "backend/api-gateway/dist/index.js"]

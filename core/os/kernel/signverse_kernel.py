@@ -30,7 +30,7 @@ logger = setup_logger("SignVerseKernel")
 def _perception_worker(frame_queue, state_queue):
     """Background process for running MediaPipe (GIL isolated).
     
-    Pushes a tuple (bc_state_tensor, pose_landmarks) so the kernel can
+    Pushes a tuple (bc_state_tensor, pose_landmarks, fatigue_face_landmarks) so the kernel can
     drive both the AI policy (BC-MLP) and the retargeting pipeline from
     a single perception result.
     """
@@ -46,15 +46,23 @@ def _perception_worker(frame_queue, state_queue):
             state_tensor = torch.zeros(1, 63)
             right_hand = landmarks.get("right_hand_landmarks") if landmarks else None
             if right_hand is not None and hasattr(right_hand, "shape"):
-                if right_hand.shape == (21, 3):
+                if right_hand.shape[0] == 21:
                     state_tensor = torch.tensor(
-                        right_hand.flatten(), dtype=torch.float32
+                        right_hand[:, :3].flatten(), dtype=torch.float32
                     ).unsqueeze(0)
 
             # ── Retargeting input: 33-point body pose ─────────────────
             pose_landmarks = landmarks.get("pose_landmarks") if landmarks else None
 
-            payload = (state_tensor, pose_landmarks)
+            # ── Face landmarks subset for fatigue detection ─────────
+            # Nose tip (4), Left Eye corners/tops (33, 133, 160, 158, 144, 153), Right Eye corners/tops (263, 362, 385, 387, 380, 373)
+            face_lms = landmarks.get("face_landmarks") if landmarks else None
+            fatigue_face_landmarks = None
+            if face_lms is not None and len(face_lms) >= 468:
+                indices = [4, 33, 133, 160, 158, 144, 153, 263, 362, 385, 387, 380, 373]
+                fatigue_face_landmarks = face_lms[indices]
+
+            payload = (state_tensor, pose_landmarks, fatigue_face_landmarks)
 
             # Keep only the freshest payload
             try:
@@ -82,6 +90,11 @@ class SignVerseKernel:
 
         self.last_state = torch.zeros(1, 63)       # Seed BC-MLP state
         self.last_pose_landmarks = None            # Seed retargeting state
+        self.last_face_landmarks = None            # Seed fatigue face landmarks
+        
+        # Initialize fatigue classifier
+        from core.learning.fatigue.classifier import FatigueClassifier
+        self.fatigue_classifier = FatigueClassifier()
         
         # 2. AI Policy Layer (Behavior Cloning)
         import os
@@ -142,6 +155,12 @@ class SignVerseKernel:
         self.orchestrator.recorder.begin_episode()
         logger.info("Training Orchestrator: STARTED")
 
+        # 8. Online Learning Core
+        from core.learning.imitation.online_learner import OnlineLearner
+        self.online_learner = OnlineLearner(self.policy)
+        self.online_learner.load_replay_buffer()
+        logger.info("Online Learner: INITIALIZED")
+
     def tick(self, frame: np.ndarray) -> bool:
         """
         Executes one real-time cycle of the SignVerse OS asynchronously.
@@ -159,9 +178,12 @@ class SignVerseKernel:
             # 2. Pull freshest perception payload (non-blocking)
             try:
                 payload = self.state_queue.get_nowait()
-                # Payload is (bc_state_tensor, pose_landmarks)
-                if isinstance(payload, tuple) and len(payload) == 2:
-                    self.last_state, self.last_pose_landmarks = payload
+                # Payload is (bc_state_tensor, pose_landmarks, fatigue_face_landmarks)
+                if isinstance(payload, tuple):
+                    if len(payload) == 3:
+                        self.last_state, self.last_pose_landmarks, self.last_face_landmarks = payload
+                    elif len(payload) == 2:
+                        self.last_state, self.last_pose_landmarks = payload
                 else:
                     # Legacy fallback: plain tensor
                     self.last_state = payload
@@ -273,15 +295,48 @@ class SignVerseKernel:
             self.robot_state.update(joints_dict, status="active")
             current_state_snap = self.robot_state.get_current_state()
 
+            # ── 2.5 Fatigue Evaluation ──────────────────────────────
+            fatigue_res = {"score": 0.0, "state": "ok", "signals": {"ear": 0.3, "head_pitch": 0.0, "hand_velocity": 0.0}, "calibrating": True}
+            is_recording = False
+            
+            # Check if recording is active
+            if hasattr(self, "orchestrator") and self.orchestrator is not None:
+                if self.orchestrator.recorder._episode_id is not None:
+                    is_recording = True
+                    
+            if hasattr(self, "fatigue_classifier"):
+                fatigue_res = self.fatigue_classifier.update(
+                    face_landmarks=self.last_face_landmarks,
+                    pose_landmarks=self.last_pose_landmarks,
+                    is_recording=is_recording
+                )
+                
+                # Check for auto-pause transition (score > 0.65 for 30s)
+                if fatigue_res["state"] == "fatigued":
+                    if is_recording and not self.orchestrator.recorder._is_paused:
+                        self.orchestrator.recorder.pause_episode()
+                        logger.warning("FATIGUE DETECTED: Auto-paused active recording session.")
+
             # ── Record frame for online training ──────────────────────────
             obs_np = self.last_state.detach().numpy().flatten()
             expert = q if mode == "retargeted" else None
+            
+            fatigue_score = fatigue_res.get("score", 0.0)
             self.orchestrator.recorder.record(
                 obs=obs_np,
                 action=q,
                 expert=expert,
                 mode=mode,
+                fatigue_score=fatigue_score
             )
+
+            # Convert pose landmarks to list for WebSocket transmission
+            pose_lms = []
+            if self.last_pose_landmarks is not None:
+                pose_lms = [
+                    {"x": float(lm[0]), "y": float(lm[1]), "z": float(lm[2]), "visibility": float(lm[3])}
+                    for lm in self.last_pose_landmarks
+                ]
 
             return {
                 "status": "CONNECTED",
@@ -293,7 +348,9 @@ class SignVerseKernel:
                     "violations": retarget_result.get("violations", []) if mode != "ai_inference" else [],
                     "source_angles": retarget_result.get("source_angles", {}) if mode != "ai_inference" else {},
                     "smoothed": retarget_result.get("smoothed", False) if mode != "ai_inference" else False,
-                }
+                },
+                "pose_landmarks": pose_lms,
+                "fatigue": fatigue_res
             }
         except Exception as e:
             logger.error(f"Kernel Tick Error: {e}")
@@ -310,6 +367,13 @@ class SignVerseKernel:
     def shutdown(self):
         self.is_shutdown = True
         logger.info("Initiating Kernel shutdown sequence...")
+
+        # Save online learning state
+        if hasattr(self, 'online_learner') and self.online_learner:
+            try:
+                self.online_learner.save_replay_buffer()
+            except Exception as _e:
+                logger.warning("Error saving online replay buffer: %s", _e)
 
         # Stop online training and flush recorder
         try:

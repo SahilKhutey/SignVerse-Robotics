@@ -14,7 +14,8 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["./shared/*/src"]
+      "@shared/*": ["./shared/*/src"],
+      "@signverse/shared-types": ["./packages/shared-types/src"]
     }
   }
 }
