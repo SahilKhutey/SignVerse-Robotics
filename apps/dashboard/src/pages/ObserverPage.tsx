@@ -10,22 +10,27 @@ export default function ObserverPage() {
   const token = searchParams.get('token');
   const navigate = useNavigate();
   
-  const [isValidating, setIsValidating] = useState(true);
-  const [isValidToken, setIsValidToken] = useState(false);
-  const [liveJointAngles, setLiveJointAngles] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [isTwinPaused, setIsTwinPaused] = useState(false);
   
   // Connection states
   const [connectionState, setConnectionState] = useState<'connecting' | 'live' | 'failed' | 'disconnected'>('connecting');
   const [rtcActive, setRtcActive] = useState(false);
+  const [wsRelayActive, setWsRelayActive] = useState(false);
   const [rtt, setRtt] = useState<number | null>(null);
   const [jitter, setJitter] = useState<number>(0);
   const [packetLoss, setPacketLoss] = useState<number>(0);
   
+  const [isValidToken, setIsValidToken] = useState(false);
+  const [isValidating, setIsValidating] = useState(true);
+  const [liveJointAngles, setLiveJointAngles] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+
   const socketRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const offlineIntervalRef = useRef<any>(null);
 
   // 1. Verify sharing token on mount
   useEffect(() => {
+    let isCurrent = true;
     if (!token) {
       setIsValidToken(false);
       setIsValidating(false);
@@ -35,8 +40,10 @@ export default function ObserverPage() {
     const verifyToken = async () => {
       try {
         const response = await fetch(`${VITE_API_URL}/api/share/verify?token=${token}`);
+        if (!isCurrent) return;
         if (response.ok) {
           const data = await response.json();
+          if (!isCurrent) return;
           if (data.status === 'success' && data.active) {
             setIsValidToken(true);
             connectObserverSocket(token);
@@ -47,18 +54,22 @@ export default function ObserverPage() {
           setIsValidToken(false);
         }
       } catch (err) {
+        if (!isCurrent) return;
         // Fallback for local development offline simulation
         console.warn('Ecosystem verify offline, simulating connection');
         setIsValidToken(true);
         simulateOfflineData();
       } finally {
-        setIsValidating(false);
+        if (isCurrent) {
+          setIsValidating(false);
+        }
       }
     };
 
     verifyToken();
 
     return () => {
+      isCurrent = false;
       cleanupResources();
     };
   }, [token]);
@@ -83,7 +94,7 @@ export default function ObserverPage() {
       setJitter(parseFloat((1.0 + Math.random() * 0.8).toFixed(1)));
     }, 16); // 60Hz
 
-    return () => clearInterval(interval);
+    offlineIntervalRef.current = interval;
   };
 
   const connectObserverSocket = (shareToken: string) => {
@@ -97,12 +108,16 @@ export default function ObserverPage() {
     socketRef.current = ws;
 
     ws.onopen = () => {
-      setConnectionState('connecting');
+      // WS relay is active as soon as socket opens
+      setWsRelayActive(true);
+      setConnectionState('live');
+      setRtt(15);
     };
 
     ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data);
+        console.log("[Observer] Received WebSocket msg:", msg);
         const { type } = msg;
 
         if (type === 'offer') {
@@ -113,8 +128,13 @@ export default function ObserverPage() {
           }
         } else if (type === 'telemetry') {
           // WebSocket telemetry fallback relay
-          if (!rtcActive) {
+          if (msg.data && msg.data.type === 'pause_state') {
+            setIsTwinPaused(msg.data.paused);
+          } else if (!rtcActive) {
             setLiveJointAngles(msg.data);
+            if (typeof window !== 'undefined') {
+              (window as any).__lastReceivedJoints = { joints: msg.data, receivedAt: Date.now() };
+            }
             setConnectionState('live');
             setRtt(15); // Standard WS fallback RTT estimation
             setJitter(2.5);
@@ -129,6 +149,7 @@ export default function ObserverPage() {
 
     ws.onclose = () => {
       setConnectionState('disconnected');
+      setWsRelayActive(false);
       cleanupResources();
     };
   };
@@ -149,8 +170,16 @@ export default function ObserverPage() {
 
         channel.onmessage = (e) => {
           try {
-            const joints = JSON.parse(e.data);
-            setLiveJointAngles(joints);
+            const data = JSON.parse(e.data);
+            console.log("[Observer] Received WebRTC msg:", data);
+            if (data && data.type === 'pause_state') {
+              setIsTwinPaused(data.paused);
+            } else {
+              setLiveJointAngles(data);
+              if (typeof window !== 'undefined') {
+                (window as any).__lastReceivedJoints = { joints: data, receivedAt: Date.now() };
+              }
+            }
           } catch (err) {
             console.error('DataChannel parse error:', err);
           }
@@ -226,7 +255,12 @@ export default function ObserverPage() {
       pcRef.current.close();
       pcRef.current = null;
     }
+    if (offlineIntervalRef.current) {
+      clearInterval(offlineIntervalRef.current);
+      offlineIntervalRef.current = null;
+    }
     setRtcActive(false);
+    setWsRelayActive(false);
   };
 
   if (isValidating) {
@@ -240,13 +274,29 @@ export default function ObserverPage() {
     );
   }
 
-  if (!isValidToken) {
+  if (connectionState === 'disconnected') {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#07080a] gap-4 p-4 text-center select-none font-mono">
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#07080a] gap-4 p-4 text-center select-none font-mono" id="operator-disconnected-overlay">
         <ShieldAlert size={36} className="text-accent-red animate-bounce" />
         <div>
           <h2 className="font-display text-xs font-black tracking-widest text-text-primary uppercase">
-            LINK INVALID OR EXPIRED
+            Operator ended the session
+          </h2>
+          <p className="text-[9px] text-text-secondary max-w-[280px] leading-relaxed mt-2">
+            The active operator has closed their console tab and terminated this live observation stream.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isValidToken) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#07080a] gap-4 p-4 text-center select-none font-mono" id="expired-token-overlay">
+        <ShieldAlert size={36} className="text-accent-red animate-bounce" />
+        <div>
+          <h2 className="font-display text-xs font-black tracking-widest text-text-primary uppercase">
+            SESSION EXPIRED
           </h2>
           <p className="text-[9px] text-text-secondary max-w-[280px] leading-relaxed mt-2">
             The session sharing token is expired (links only remain active for 1 hour) or has been revoked by the operator.
@@ -264,14 +314,16 @@ export default function ObserverPage() {
 
   const getStatusText = () => {
     if (connectionState === 'connecting') return 'ESTABLISHING HANDSHAKE';
-    if (connectionState === 'disconnected') return 'OPERATOR DISCONNECTED';
+    if ((connectionState as string) === 'disconnected') return 'OPERATOR DISCONNECTED';
     if (connectionState === 'failed') return 'STREAM OFFLINE';
-    return rtcActive ? 'RTC LIVE STREAM' : 'WS RELAY ACTIVE';
+    if (rtcActive) return 'RTC LIVE STREAM';
+    if (wsRelayActive || connectionState === 'live') return 'Relayed';
+    return 'CONNECTING';
   };
 
   const getStatusColor = () => {
     if (connectionState === 'connecting') return 'text-amber-500 animate-pulse';
-    if (connectionState === 'disconnected' || connectionState === 'failed') return 'text-accent-red font-bold';
+    if ((connectionState as string) === 'disconnected' || connectionState === 'failed') return 'text-accent-red font-bold';
     return rtcActive ? 'text-accent-cyan font-bold animate-pulse' : 'text-accent-green';
   };
 
@@ -291,7 +343,7 @@ export default function ObserverPage() {
         <div className="flex items-center gap-2 bg-[#07080a]/85 border border-white/5 px-3 py-1.5 rounded-full backdrop-blur-md">
           <div className="w-1.5 h-1.5 rounded-full bg-accent-green animate-ping" />
           <span className="font-mono text-[8px] text-text-secondary uppercase tracking-widest">
-            LIVE BROADCAST
+            OBSERVING LIVE
           </span>
         </div>
       </header>
@@ -301,6 +353,17 @@ export default function ObserverPage() {
         {/* Left Side: RobotCanvas 3D */}
         <div className="flex-1 relative h-full bg-[#08090c]">
           <RobotCanvas customJointAngles={liveJointAngles} />
+          {isTwinPaused && (
+            <div 
+              id="paused-overlay" 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-50 font-mono"
+            >
+              <div className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
+              <span className="text-[10px] tracking-widest text-amber-500 uppercase font-black">
+                Twin Paused by Operator
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Right Side: Read-only Diagnostics Overlay */}
@@ -315,7 +378,7 @@ export default function ObserverPage() {
               </span>
             </div>
             <div className="font-mono text-[8px] text-text-secondary flex flex-col gap-1.5 mt-1">
-              <div>SIGNAL VALUE: <span className={getStatusColor()}>{getStatusText()}</span></div>
+              <div>SIGNAL VALUE: <span className={getStatusColor()} data-testid="observer-status-text">{getStatusText()}</span></div>
               <div className="flex items-center gap-1">
                 <span>TRANSPORT:</span> 
                 <span className="text-text-primary font-bold">

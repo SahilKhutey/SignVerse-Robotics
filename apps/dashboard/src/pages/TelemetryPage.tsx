@@ -109,31 +109,39 @@ export default function TelemetryPage() {
 
       {/* Top row: 4 metrics cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="telemetry-metrics-grid">
-        <FrameRateDisplay />
-        
-        <MetricCard
-          id="metric-confidence"
-          title="AI POLICY CONFIDENCE"
-          value={`${Math.round(confidence * 100)}%`}
-          icon={<Brain size={14} className={confidence >= 0.8 ? 'text-accent-green' : 'text-accent-cyan'} />}
-          description={confidence >= 0.8 ? 'Optimal prediction alignment' : 'Low matching density'}
-        />
+        {!frame ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} data-testid="skeleton" className="animate-pulse bg-white/5 border border-white/5 rounded-xl h-24 w-full" />
+          ))
+        ) : (
+          <>
+            <FrameRateDisplay />
+            
+            <MetricCard
+              id="metric-confidence"
+              title="AI POLICY CONFIDENCE"
+              value={`${Math.round(confidence * 100)}%`}
+              icon={<Brain size={14} className={confidence >= 0.8 ? 'text-accent-green' : 'text-accent-cyan'} />}
+              description={confidence >= 0.8 ? 'Optimal prediction alignment' : 'Low matching density'}
+            />
 
-        <MetricCard
-          id="metric-session-duration"
-          title="ACTIVE SESSION RUNTIME"
-          value={formatDuration(duration)}
-          icon={<Clock size={14} className="text-accent-violet" />}
-          description={wsState === 'LIVE' ? 'Stream active' : 'Stream disconnected'}
-        />
+            <MetricCard
+              id="metric-session-duration"
+              title="ACTIVE SESSION RUNTIME"
+              value={formatDuration(duration)}
+              icon={<Clock size={14} className="text-accent-violet" />}
+              description={wsState === 'LIVE' ? 'Stream active' : 'Stream disconnected'}
+            />
 
-        <MetricCard
-          id="metric-frame-count"
-          title="ACCUMULATED FRAMES"
-          value={totalFrames}
-          icon={<Layers size={14} className="text-accent-cyan" />}
-          description="Total telemetry frames counted"
-        />
+            <MetricCard
+              id="metric-frame-count"
+              title="ACCUMULATED FRAMES"
+              value={totalFrames}
+              icon={<Layers size={14} className="text-accent-cyan" />}
+              description="Total telemetry frames counted"
+            />
+          </>
+        )}
       </div>
 
       {/* Main Charts Area */}

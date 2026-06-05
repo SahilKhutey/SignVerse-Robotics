@@ -81,3 +81,58 @@ def test_learning_rate_update():
     assert response_high.status_code in {400, 503}
     if response_high.status_code == 400:
         assert "Learning rate must be between" in response_high.json()["detail"]
+
+def test_online_state_endpoint():
+    response = client.get("/api/online/state")
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+    assert "total_steps" in data
+    assert "current_lr" in data
+    assert "replay_buffer_size" in data
+    assert "checkpoint_count" in data
+    assert "ewc_lambda" in data
+
+def test_online_pause_endpoint():
+    response = client.post("/api/online/pause", json={"paused": True})
+    assert response.status_code in {200, 503}
+    if response.status_code == 200:
+        data = response.json()
+        assert data["status"] == "paused"
+
+def test_online_config_endpoint():
+    # Valid config
+    response = client.post("/api/online/config", json={"learning_rate": 1e-4, "ewc_lambda": 100.0, "replay_ratio": 0.2})
+    assert response.status_code in {200, 503}
+    
+    # Invalid config - learning rate out of range (under)
+    response_lr_under = client.post("/api/online/config", json={"learning_rate": 1e-6})
+    assert response_lr_under.status_code in {400, 422, 503}
+    
+    # Invalid config - learning rate out of range (over)
+    response_lr_over = client.post("/api/online/config", json={"learning_rate": 1e-3})
+    assert response_lr_over.status_code in {400, 422, 503}
+    
+    # Invalid config - ewc_lambda out of range
+    response_lambda_over = client.post("/api/online/config", json={"ewc_lambda": 6000.0})
+    assert response_lambda_over.status_code in {400, 422, 503}
+    
+    # Invalid config - replay_ratio out of range
+    response_ratio_over = client.post("/api/online/config", json={"replay_ratio": 0.6})
+    assert response_ratio_over.status_code in {400, 422, 503}
+
+def test_online_replay_buffer_paginated():
+    response = client.get("/api/online/replay_buffer?page=1&page_size=10")
+    assert response.status_code == 200
+    data = response.json()
+    assert "entries" in data
+    assert "capacity" in data
+    assert "fill_percent" in data
+    assert "total_count" in data
+
+def test_bad_lr_does_not_crash():
+    response = client.post("/api/online/config", json={"learning_rate": 1.0})
+    assert response.status_code == 422
+    data = response.json()
+    assert "learning_rate must be ≤ 5e-4" in data["detail"][0]["msg"]
+

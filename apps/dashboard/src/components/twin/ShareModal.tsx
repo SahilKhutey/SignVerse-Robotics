@@ -143,7 +143,7 @@ export default function ShareModal({
                   <span className="text-[8px] text-text-secondary uppercase">Link Expiration</span>
                   <div className="flex items-center gap-1 text-[11px] font-bold text-amber-500">
                     <Clock size={11} />
-                    <span>{formatTime(timeLeft)} LEFT</span>
+                    <span>{formatTime(timeLeft)} ({Math.floor(timeLeft / 60)} min) LEFT</span>
                   </div>
                 </div>
               </div>

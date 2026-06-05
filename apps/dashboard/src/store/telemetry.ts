@@ -106,6 +106,19 @@ export const useTelemetryStore = create<TelemetryState>()(
     isTwinFrozen: false,
 
     setFrame: (frame) => {
+      rawTelemetryRef.current = frame;
+      
+      // If we are not recording and within the throttle window, return early to avoid calling Zustand set()
+      const isRecording = get().isRecording;
+      if (!isRecording) {
+        const now = performance.now();
+        const lastUp = (window as any).__lastStateUpdate || 0;
+        if (now - lastUp < 16.6 && get().frame) {
+          return;
+        }
+        (window as any).__lastStateUpdate = now;
+      }
+
       set((state) => {
         const updatedFrames = state.isRecording && frame
           ? [...state.recordedFrames, frame]
@@ -333,3 +346,7 @@ export const useTelemetryStore = create<TelemetryState>()(
     getRawFrame: () => rawTelemetryRef.current
   }))
 );
+
+if (typeof window !== 'undefined') {
+  (window as any).useTelemetryStore = useTelemetryStore;
+}

@@ -34,6 +34,14 @@ export class RingBuffer<T> {
     return this.isFull ? this.capacity : this.writePointer;
   }
 
+  public get length(): number {
+    return this.size();
+  }
+
+  public toArray(): T[] {
+    return this.getSnapshot();
+  }
+
   public clear(): void {
     this.buffer = new Array<T>(this.capacity);
     this.writePointer = 0;
@@ -43,3 +51,7 @@ export class RingBuffer<T> {
 
 // Export a singleton instance with capacity 2000 for storing telemetry downsampled to 200Hz
 export const telemetryRingBuffer = new RingBuffer<TelemetryFrame>(2000);
+
+if (typeof window !== 'undefined') {
+  (window as any).telemetryRingBuffer = telemetryRingBuffer;
+}

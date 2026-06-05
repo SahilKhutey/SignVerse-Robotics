@@ -131,6 +131,7 @@ export default function VoiceCommandButton({
   if (!isSupported) {
     return (
       <button
+        id="voice-mic-btn"
         disabled
         title="Voice input not supported in this browser"
         className="relative flex items-center justify-center w-[38px] h-[38px] rounded-lg bg-white/5 border border-white/10 text-text-muted opacity-40 cursor-not-allowed"
@@ -172,6 +173,7 @@ export default function VoiceCommandButton({
 
       {/* Mic Button */}
       <button
+        id="voice-mic-btn"
         onClick={isListening ? onStop : onStart}
         title={isListening ? 'Stop voice input' : 'Start voice input (hands-free)'}
         className={`relative z-10 flex items-center justify-center w-[38px] h-[38px] rounded-lg border transition-all cursor-pointer active:scale-95 ${

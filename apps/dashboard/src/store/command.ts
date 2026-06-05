@@ -219,6 +219,36 @@ export const useCommandStore = create<CommandState>((set, get) => ({
         throw new Error(resData.message || 'Unknown parsing failure');
       }
     } catch (err: any) {
+      if (err.message.includes('HTTP 500') || err.message.includes('500')) {
+        import('./toast').then(({ useToastStore }) => {
+          useToastStore.getState().addToast({
+            message: 'Internal Server Error (500): Failed to parse command.',
+            type: 'error',
+            code: 'HTTP_500'
+          });
+        });
+        set((state) => {
+          const updated = state.messages.map((m) => {
+            if (m.id === assistantMsgId) {
+              return {
+                ...m,
+                status: 'error' as const,
+                text: 'Internal Server Error (500): Failed to parse command.',
+                error: err.message,
+              };
+            }
+            return m;
+          });
+          saveMessages(updated);
+          return {
+            pending: false,
+            messages: updated
+          };
+        });
+        addLog(`❌ Command parsing failed: ${err.message}`, 'error');
+        return;
+      }
+
       // Local fallback parsing (simulating local reasoning engine offline)
       addLog(`⚠️ Cognitive Gateway offline. Running local parser heuristic fallback.`, 'warn');
       const lower = commandText.toLowerCase();
@@ -305,4 +335,10 @@ export const useCommandStore = create<CommandState>((set, get) => ({
       addLog(`🟢 Local parsed fallback matched intent ${intent} (primitive: ${primitive})`, 'success');
     }
   }
-}));
+}
+));
+
+if (typeof window !== 'undefined') {
+  (window as any).useCommandStore = useCommandStore;
+}
+

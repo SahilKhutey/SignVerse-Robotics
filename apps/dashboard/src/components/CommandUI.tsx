@@ -188,12 +188,27 @@ export default function CommandUI() {
                 <div className={`p-3.5 rounded-2xl text-[10px] leading-relaxed shadow-sm font-sans border transition-all ${
                   isUser 
                     ? 'bg-[#152332]/50 border-accent-cyan/25 rounded-tr-sm text-text-primary' 
+                    : msg.status === 'error'
+                    ? 'bg-accent-red/10 border-accent-red/35 rounded-tl-sm text-accent-red error-card'
                     : 'bg-[#0f1118]/80 border-white/5 rounded-tl-sm text-text-secondary'
                 }`}>
                   {msg.text}
 
+                  {msg.status === 'error' && (
+                    <div className="mt-2 flex items-center justify-between border-t border-accent-red/20 pt-2 font-display select-none">
+                      <span className="text-[8px] font-bold uppercase tracking-wider">Exception Details</span>
+                      <button
+                        type="button"
+                        onClick={() => sendMessage(messages.find(m => m.sender === 'user')?.text || '')}
+                        className="px-2.5 py-1 rounded bg-accent-red/15 hover:bg-accent-red/25 border border-accent-red/30 text-accent-red text-[8px] font-bold cursor-pointer transition-all active:scale-95 try-again-btn"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+
                   {/* Robot intent visuals inside bot bubble */}
-                  {!isUser && <IntentViz msg={msg} />}
+                  {!isUser && msg.status !== 'error' && <IntentViz msg={msg} />}
                 </div>
                 
                 {/* Timestamp */}

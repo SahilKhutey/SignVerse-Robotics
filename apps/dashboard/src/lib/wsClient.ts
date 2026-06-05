@@ -202,7 +202,7 @@ class WSClient {
     this.stateListeners.forEach((callback) => callback(state));
   }
 
-  private notifyMessage(msg: WSMessage): void {
+  public notifyMessage(msg: WSMessage): void {
     this.messageListeners.forEach((callback) => callback(msg));
   }
 
@@ -240,3 +240,24 @@ class WSClient {
 }
 
 export const wsClient = new WSClient();
+
+if (typeof window !== 'undefined') {
+  (window as any).wsClient = wsClient;
+}
+
+export function wsMessageDiscriminator(
+  msg: any,
+  handlers: {
+    onTelemetry?: (data: any) => void;
+    onForgetting?: (data: any) => void;
+    onError?: (message: string) => void;
+  }
+) {
+  if (msg.type === 'telemetry') {
+    handlers.onTelemetry?.(msg.data);
+  } else if (msg.type === 'forgetting') {
+    handlers.onForgetting?.(msg);
+  } else if (msg.type === 'error') {
+    handlers.onError?.(msg.message);
+  }
+}

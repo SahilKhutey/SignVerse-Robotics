@@ -42,7 +42,7 @@ export default function ConnectionIndicator() {
       case 'DEAD':
         return {
           dotClass: 'bg-red-700 shadow-[0_0_10px_rgba(185,28,28,0.6)]',
-          text: 'CONN DEAD',
+          text: 'OFFLINE',
           textClass: 'text-red-600 font-bold',
           icon: <PowerOff size={14} className="text-red-600" />,
         };
@@ -77,7 +77,7 @@ export default function ConnectionIndicator() {
       case 'LIVE':
         return <span className="w-2 h-2 rounded-full bg-accent-green shadow-[0_0_12px_rgba(57,255,20,0.8)] animate-breathe" />;
       case 'DEAD':
-        return <span className="w-2 h-2 rounded-full bg-red-700 shadow-[0_0_10px_rgba(185,28,28,0.6)]" />;
+        return <span className="w-2 h-2 rounded-full bg-red-700 shadow-[0_0_10px_rgba(185,28,28,0.6)] animate-pulse" />;
       case 'IDLE':
       default:
         return <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]" />;
@@ -87,13 +87,15 @@ export default function ConnectionIndicator() {
   return (
     <div 
       className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 backdrop-blur-md"
-      role="status"
       aria-live="polite"
       aria-label={`Connection Status: ${config.text} ${wsState === 'LIVE' ? `${hz} Hertz` : ''}`}
     >
       <div className="flex items-center gap-2">
         {renderDot()}
-        <span className={`font-display text-[10px] uppercase tracking-wider ${config.textClass}`}>
+        <span 
+          role="status"
+          className={`font-display text-[10px] uppercase tracking-wider ${config.textClass}`}
+        >
           {config.text}
         </span>
       </div>

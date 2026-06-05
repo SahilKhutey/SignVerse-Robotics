@@ -7,7 +7,7 @@ $WScriptShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
 $Shortcut.TargetPath = $TargetFile
 $Shortcut.WorkingDirectory = "c:\Users\User\Documents\SignVerse-Robotics\sign-verse-robotics"
-$Shortcut.IconLocation = "imageres.dll, 102" # Microchip / hardware device icon
+$Shortcut.IconLocation = "c:\Users\User\Documents\SignVerse-Robotics\sign-verse-robotics\logo.ico" # Premium custom AI/Robotics logo
 $Shortcut.Save()
 
 Write-Host "Success: Desktop shortcut 'SignVerse OS' created at $ShortcutFile" -ForegroundColor Green

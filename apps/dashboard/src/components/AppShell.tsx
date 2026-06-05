@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useTelemetryStore } from '../store/telemetry';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useLearningEvents } from '../hooks/useLearningEvents';
 import NavItem from './nav/NavItem';
 import ConnectionIndicator from './ConnectionIndicator';
 import { ErrorBoundary } from './ErrorBoundary';
-import LiveAccuracySparkline from './learning/LiveAccuracySparkline';
+import LiveAccuracySparkline from './online/LiveAccuracySparkline';
 import { OfflineOverlay } from './ui/OfflineOverlay';
 import { ToastContainer } from './ui/ToastContainer';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 
 export default function AppShell() {
+  useLearningEvents();
   const { triggerEstop, clearEstopTrigger } = useWebSocket();
   const isEstopTriggered = useTelemetryStore((state) => state.isEstopTriggered);
   const activeRobotId = useTelemetryStore((state) => state.activeRobotId);
@@ -137,6 +139,7 @@ export default function AppShell() {
     { to: '/command', icon: Terminal, label: 'Command API' },
     { to: '/collector', icon: Database, label: 'Data Collector' },
     { to: '/training', icon: Brain, label: 'Policy Training' },
+    { to: '/online-learning', icon: Cpu, label: 'Online Learning' },
     { to: '/rlhf', icon: Heart, label: 'RLHF Studio' },
     { to: '/simulation', icon: FlaskConical, label: 'Sim-to-Real' },
     { to: '/system', icon: Settings, label: 'System Health' },

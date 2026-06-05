@@ -164,7 +164,7 @@ export default function JointAngleChart() {
 
       <CardContent className="p-0 flex flex-col gap-4">
         {/* Canvas container for uPlot chart */}
-        <div ref={containerRef} className="w-full h-[280px]" />
+        <div id="joint-angle-chart-container" ref={containerRef} className="w-full h-[280px]" />
 
         {/* Custom interactive legend */}
         <div className="flex flex-wrap gap-2.5 justify-center mt-2 border-t border-white/5 pt-3">

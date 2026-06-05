@@ -24,6 +24,12 @@ export default function TwinPage() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [observers, setObservers] = useState<string[]>([]);
+  const observersRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    observersRef.current = observers;
+  }, [observers]);
+
   const operatorSocketRef = useRef<WebSocket | null>(null);
   const pcsRef = useRef<Map<string, { pc: RTCPeerConnection; channel: RTCDataChannel; wsFallback: boolean }>>(new Map());
 
@@ -85,7 +91,7 @@ export default function TwinPage() {
     ws.onclose = () => {
       console.log('Operator sharing WebSocket closed');
       // Clean up all peers
-      observers.forEach((id) => cleanupPeer(id));
+      observersRef.current.forEach((id) => cleanupPeer(id));
       setObservers([]);
       setShareToken(null);
     };
@@ -161,6 +167,33 @@ export default function TwinPage() {
               type: 'telemetry_relay',
               observer_id: observerId,
               frame: frame.jointAngles
+            }));
+          }
+        });
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [shareToken]);
+
+  // Broadcast pause/freeze state changes
+  useEffect(() => {
+    if (!shareToken) return;
+
+    const unsubscribe = useTelemetryStore.subscribe(
+      (state) => state.isTwinFrozen,
+      (isTwinFrozen) => {
+        pcsRef.current.forEach((peer, observerId) => {
+          const payload = { type: 'pause_state', paused: isTwinFrozen };
+          if (peer.channel.readyState === 'open') {
+            peer.channel.send(JSON.stringify(payload));
+          } else if (peer.wsFallback && operatorSocketRef.current?.readyState === WebSocket.OPEN) {
+            operatorSocketRef.current.send(JSON.stringify({
+              type: 'telemetry_relay',
+              observer_id: observerId,
+              frame: payload
             }));
           }
         });

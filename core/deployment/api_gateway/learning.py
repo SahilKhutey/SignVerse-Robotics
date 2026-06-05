@@ -49,7 +49,7 @@ async def get_learning_status():
         "status": "success",
         "step": ol.update_step,
         "learning_rate": ol.lr,
-        "replay_buffer_size": len(ol.replay_buffer),
+        "replay_buffer_size": len(ol.replay_buffer.buffer),
         "checkpoints_count": len(checkpoint_files),
         "forgetting_alerts": ol.forgetting_alerts
     }
@@ -74,11 +74,11 @@ async def get_replay_buffer_visualizer():
 
     ol = kernel.online_learner
     demos = []
-    for i, demo in enumerate(ol.replay_buffer):
+    for i, demo in enumerate(ol.replay_buffer.buffer):
         is_highlighted = i in ol.last_batch_highlighted_indices
         demos.append({
             "id": f"demo_{i}",
-            "label": f"demo_session_{i + 1}.h5",
+            "label": demo.get("label", f"demo_session_{i + 1}.h5"),
             "divergenceScore": round(0.12 + 0.05 * math.sin(i * 0.3), 4),
             "highlighted": is_highlighted
         })

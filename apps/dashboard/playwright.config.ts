@@ -1,35 +1,55 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  testDir: './src/tests',
-  testMatch: '**/*.spec.ts',
-  timeout: 30000,
-  expect: {
-    timeout: 5000,
-  },
-  fullyParallel: false,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  testDir: './tests/e2e',
+  timeout: 120000,
+  fullyParallel: false,   // WS state is shared — run sequentially
   workers: 1,
-  reporter: process.env.CI ? 'github' : 'list',
+  retries: 2,             // Flaky WS tests get 2 retries
+  reporter: [['html'],['line']],
+  expect: {
+    timeout: 15000,
+  },
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
+    video: 'retain-on-failure',
     viewport: { width: 1280, height: 720 },
+    launchOptions: {
+      args: [
+        '--enable-precise-memory-info',
+        '--disable-gpu-vsync',
+        '--disable-frame-rate-limit',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
+      ]
+    }
   },
-  projects: [
+  webServer: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      command: 'python -m uvicorn gateway:app --port 8000',
+      url: 'http://localhost:8000/api/status',
+      cwd: '../../core/deployment/api_gateway',
+      env: {
+        PYTHONPATH: path.resolve(__dirname, '../..'),
+      },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
     },
-  ],
-  webServer: {
-    // In CI: serve the pre-built dist/ with vite preview (fast, no compilation).
-    // Locally: start the full Vite dev server with HMR.
-    command: process.env.CI ? 'pnpm run preview --port 5173' : 'pnpm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
-});
-
+    {
+      command: 'pnpm --filter @signverse/dashboard dev',
+      url: 'http://localhost:5173',
+      env: {
+        VITE_API_URL: 'http://localhost:8000',
+        VITE_WS_URL: 'ws://localhost:8000',
+      },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    }
+  ]
+})

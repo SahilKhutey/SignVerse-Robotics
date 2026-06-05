@@ -1,4 +1,5 @@
 import { VITE_API_URL } from './env';
+import { OnlineLearnerState, ReplayBufferEntry } from '@signverse/shared-types';
 
 export class APIError extends Error {
   public status: number;
@@ -72,6 +73,34 @@ class APIClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  public getOnlineState(): Promise<OnlineLearnerState> {
+    return this.get<OnlineLearnerState>('/api/online/state');
+  }
+
+  public setOnlinePause(paused: boolean): Promise<OnlineLearnerState> {
+    return this.post<OnlineLearnerState, { paused: boolean }>('/api/online/pause', { paused });
+  }
+
+  public updateOnlineConfig(cfg: {
+    learning_rate?: number;
+    ewc_lambda?: number;
+    replay_ratio?: number;
+  }): Promise<OnlineLearnerState> {
+    return this.post<OnlineLearnerState, typeof cfg>('/api/online/config', cfg);
+  }
+
+  public getOnlineReplayBuffer(
+    page: number = 1,
+    pageSize: number = 50
+  ): Promise<{
+    entries: ReplayBufferEntry[];
+    capacity: number;
+    fill_percent: number;
+    total_count: number;
+  }> {
+    return this.get(`/api/online/replay_buffer?page=${page}&page_size=${pageSize}`);
   }
 }
 

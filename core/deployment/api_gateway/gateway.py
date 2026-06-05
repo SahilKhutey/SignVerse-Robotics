@@ -16,12 +16,13 @@ All fixes applied (Phase 17):
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import threading
 import time
 from collections import deque
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Set
+from typing import Any, Dict, Set, Optional
 
 import numpy as np
 from fastapi import (
@@ -34,7 +35,7 @@ import uuid
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from prometheus_client import Counter, Gauge, make_asgi_app
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 # ── Sub-modules ───────────────────────────────────────────────────────────────
 from core.reasoning.llm_agent import CognitiveAgent
@@ -53,6 +54,10 @@ from core.deployment.api_gateway.recording   import router as recording_router
 from core.deployment.api_gateway.simulation  import router as simulation_router
 from core.deployment.api_gateway.learning    import router as learning_router
 from core.deployment.api_gateway.rlhf        import router as rlhf_router
+from core.deployment.api_gateway.replay_buffer import ReplayBuffer
+from core.deployment.api_gateway.ewc import EWC
+from core.deployment.api_gateway.online_learner import OnlineLearner
+
 
 try:
     import psutil
@@ -77,10 +82,17 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 
 
 # ── Observability ─────────────────────────────────────────────────────────────
-CMD_COUNTER = Counter("signverse_commands_total",  "Total commands processed")
-MODE_GAUGE  = Gauge("signverse_telemetry_mode",    "Inference mode: 1=AI 0=Math")
-FPS_GAUGE   = Gauge("signverse_kernel_fps",        "Measured kernel tick FPS")
-WS_CLIENTS  = Gauge("signverse_ws_clients",        "Active WebSocket clients")
+from prometheus_client import REGISTRY
+
+def _get_or_create_metric(cls, name, documentation):
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return cls(name, documentation)
+
+CMD_COUNTER = _get_or_create_metric(Counter, "signverse_commands_total",  "Total commands processed")
+MODE_GAUGE  = _get_or_create_metric(Gauge, "signverse_telemetry_mode",    "Inference mode: 1=AI 0=Math")
+FPS_GAUGE   = _get_or_create_metric(Gauge, "signverse_kernel_fps",        "Measured kernel tick FPS")
+WS_CLIENTS  = _get_or_create_metric(Gauge, "signverse_ws_clients",        "Active WebSocket clients")
 
 # ── Per-client WebSocket fan-out ──────────────────────────────────────────────
 _client_queues: Set[asyncio.Queue] = set()
@@ -247,6 +259,21 @@ async def lifespan(app: FastAPI):
     app.state.reasoner   = reasoner_
     app.state.kernel     = kernel_
 
+    # ── Online Learner Initialization ─────────────────────────────────────────
+    try:
+        replay_buffer = ReplayBuffer(persist_path="data/replay_buffer.pkl")
+        ewc = EWC(kernel_.policy, ewc_lambda=400.0)
+        ewc.load_fisher("models/checkpoints/ewc_fisher.pt")
+        online_learner = OnlineLearner(kernel_.policy, replay_buffer, ewc)
+        
+        # Override kernel online_learner ref & bind to app state
+        app.state.online_learner = online_learner
+        kernel_.online_learner = online_learner
+        logger.info("Online Learner fully initialized and wired to kernel/lifespan.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Online Learner on startup: {e}")
+        app.state.online_learner = None
+
     # Start tick loop thread with the active event loop
     loop = asyncio.get_running_loop()
     tick_thread = threading.Thread(
@@ -259,6 +286,17 @@ async def lifespan(app: FastAPI):
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     logger.info("SignVerse Gateway shutting down…")
+    
+    # Save replay buffer and ewc state on exit
+    online_learner_ = getattr(app.state, "online_learner", None)
+    if online_learner_:
+        try:
+            online_learner_.save_replay_buffer()
+            if online_learner_.ewc.fisher:
+                online_learner_.ewc.save_fisher("models/checkpoints/ewc_fisher.pt")
+        except Exception as e:
+            logger.error(f"Failed to save online learner components on shutdown: {e}")
+
     kernel_.shutdown()
     gateway_state.kernel = None
 
@@ -275,6 +313,8 @@ _ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(
@@ -304,6 +344,142 @@ app.include_router(rlhf_router,        dependencies=[Depends(verify_api_key)])
 
 
 # ── REST endpoints ────────────────────────────────────────────────────────────
+
+class PausePayload(BaseModel):
+    paused: bool
+
+class ConfigPayload(BaseModel):
+    learning_rate: Optional[float] = None
+    ewc_lambda: Optional[float] = None
+    replay_ratio: Optional[float] = None
+
+    @field_validator("learning_rate")
+    @classmethod
+    def validate_lr(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None:
+            if v < 1e-5 or v > 5e-4:
+                raise ValueError("learning_rate must be ≤ 5e-4")
+        return v
+
+    @field_validator("ewc_lambda")
+    @classmethod
+    def validate_ewc_lambda(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None:
+            if v < 0 or v > 5000:
+                raise ValueError("ewc_lambda must be between 0 and 5000")
+        return v
+
+    @field_validator("replay_ratio")
+    @classmethod
+    def validate_replay_ratio(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None:
+            if v < 0.1 or v > 0.5:
+                raise ValueError("replay_ratio must be between 0.1 and 0.5")
+        return v
+
+@app.get("/api/online/state")
+async def get_online_state():
+    k = getattr(app.state, "kernel", None)
+    if not k or not hasattr(k, "online_learner") or not k.online_learner:
+        return {
+            "status": "idle",
+            "total_steps": 0,
+            "current_lr": 1e-4,
+            "replay_buffer_size": 0,
+            "checkpoint_count": 0,
+            "last_checkpoint_step": None,
+            "ewc_lambda": 80.0
+        }
+    ol = k.online_learner
+    return {
+        "status": ol.status,
+        "total_steps": ol.update_step,
+        "current_lr": ol.lr,
+        "replay_buffer_size": len(ol.replay_buffer.buffer),
+        "checkpoint_count": ol.checkpoint_count,
+        "last_checkpoint_step": ol.last_checkpoint_step,
+        "ewc_lambda": ol.ewc_lambda
+    }
+
+@app.post("/api/online/pause")
+async def set_online_pause(payload: PausePayload):
+    k = getattr(app.state, "kernel", None)
+    if not k or not hasattr(k, "online_learner") or not k.online_learner:
+        raise HTTPException(status_code=503, detail="Online learner offline")
+    ol = k.online_learner
+    ol.paused = payload.paused
+    ol.status = "paused" if payload.paused else ("updating" if ol.status == "updating" else "idle")
+    return {
+        "status": ol.status,
+        "total_steps": ol.update_step,
+        "current_lr": ol.lr,
+        "replay_buffer_size": len(ol.replay_buffer.buffer),
+        "checkpoint_count": ol.checkpoint_count,
+        "last_checkpoint_step": ol.last_checkpoint_step,
+        "ewc_lambda": ol.ewc_lambda
+    }
+
+@app.post("/api/online/config")
+async def update_online_config(payload: ConfigPayload):
+    k = getattr(app.state, "kernel", None)
+    if not k or not hasattr(k, "online_learner") or not k.online_learner:
+        raise HTTPException(status_code=503, detail="Online learner offline")
+
+    ol = k.online_learner
+    ol.update_hyperparams(
+        learning_rate=payload.learning_rate,
+        ewc_lambda=payload.ewc_lambda,
+        replay_ratio=payload.replay_ratio
+    )
+    
+    # Broadcast lr_adjusted event if learning rate changed
+    if payload.learning_rate is not None:
+        await broadcast_learning_event({
+            "type": "lr_adjusted",
+            "step": ol.update_step,
+            "loss": 0.0,
+            "val_accuracy": ol.best_val_accuracy,
+            "per_task_accuracy": {task: history[-1][1] for task, history in ol.task_accuracies.items() if history},
+            "learning_rate": ol.lr,
+            "replay_ratio": ol.replay_ratio,
+            "timestamp_ms": int(time.time() * 1000)
+        })
+
+    return {
+        "status": ol.status,
+        "total_steps": ol.update_step,
+        "current_lr": ol.lr,
+        "replay_buffer_size": len(ol.replay_buffer.buffer),
+        "checkpoint_count": ol.checkpoint_count,
+        "last_checkpoint_step": ol.last_checkpoint_step,
+        "ewc_lambda": ol.ewc_lambda
+    }
+
+@app.get("/api/online/replay_buffer")
+async def get_online_replay_buffer(page: int = 1, page_size: int = 50):
+    k = getattr(app.state, "kernel", None)
+    if not k or not hasattr(k, "online_learner") or not k.online_learner:
+        return {
+            "entries": [],
+            "capacity": 500,
+            "fill_percent": 0.0
+        }
+    ol = k.online_learner
+    entries = await ol.replay_buffer.snapshot()
+    total_count = len(entries)
+    fill_percent = round((total_count / ol.replay_buffer.capacity) * 100, 2) if ol.replay_buffer.capacity > 0 else 0.0
+    
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_entries = entries[start_idx:end_idx]
+    
+    return {
+        "entries": paginated_entries,
+        "capacity": ol.replay_buffer.capacity,
+        "fill_percent": fill_percent,
+        "total_count": total_count
+    }
+
 
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
@@ -379,7 +555,8 @@ async def stream_system_logs():
 
 
 class CommandRequest(BaseModel):
-    command: str
+    command: Optional[str] = None
+    natural_language: Optional[str] = Field(None, alias="naturalLanguage")
 
 
 @app.post("/api/command")
@@ -389,9 +566,12 @@ async def execute_command(
 ) -> Dict[str, Any]:
     kernel_ = app.state.kernel
     reasoner_ = app.state.reasoner
-    logger.info("Received Cognitive Command: %s", req.command)
+    cmd_text = req.command or req.natural_language
+    if not cmd_text:
+        raise HTTPException(status_code=400, detail="Command text is required")
+    logger.info("Received Cognitive Command: %s", cmd_text)
     CMD_COUNTER.inc()
-    parsed = reasoner_.parse_command(req.command)
+    parsed = reasoner_.parse_command(cmd_text)
     kernel_.inject_command(parsed)
     logger.info("Processed intent: %s", parsed.get("intent"))
     return {"status": "success", "agent_output": parsed}
@@ -594,12 +774,23 @@ async def websocket_fatigue_events(websocket: WebSocket):
 
 
 # ── Share Session Live endpoints ──────────────────────────────────────────────
+class ShareStartRequest(BaseModel):
+    max_observers: Optional[int] = 3
+
 @app.post("/api/share/start")
 async def start_sharing(
+    payload: Optional[ShareStartRequest] = None,
+    max_observers: Optional[int] = None,
     api_key: str = Depends(verify_api_key),
 ):
     from core.deployment.api_gateway import gateway_state
     import secrets
+
+    max_obs = 3
+    if max_observers is not None:
+        max_obs = max_observers
+    elif payload and payload.max_observers is not None:
+        max_obs = payload.max_observers
 
     # Generate secure 1-hour token
     token = secrets.token_urlsafe(16)
@@ -607,6 +798,7 @@ async def start_sharing(
         "created_at": time.time(),
         "observers": {},  # Maps observer_id -> WebSocket
         "operator_ws": None,
+        "max_observers": max_obs,
     }
 
     share_url = f"/observe?token={token}"
@@ -643,16 +835,19 @@ async def verify_sharing(token: str):
 async def websocket_observe(websocket: WebSocket, token: str, role: str):
     from core.deployment.api_gateway import gateway_state
 
-    await websocket.accept()
-
     # Verify token
     share = gateway_state.active_shares.get(token)
     if not share or (time.time() - share["created_at"] > 3600):
         if share and token in gateway_state.active_shares:
             del gateway_state.active_shares[token]
-        await websocket.send_json({"type": "error", "message": "Invalid or expired share token"})
-        await websocket.close()
-        return
+        raise HTTPException(status_code=404, detail="Invalid or expired share token")
+
+    if role == "observer":
+        max_obs = share.get("max_observers", 3)
+        if len(share["observers"]) >= max_obs:
+            raise HTTPException(status_code=403, detail="Max observers reached")
+
+    await websocket.accept()
 
     if role == "operator":
         # Save operator socket reference
@@ -686,6 +881,13 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
         finally:
             share["operator_ws"] = None
             logger.info(f"Operator disconnected from share live stream for token {token[:8]}")
+            # Close all observer WebSockets when operator disconnects
+            for obs_ws in list(share["observers"].values()):
+                try:
+                    await obs_ws.close()
+                except Exception:
+                    pass
+
 
     elif role == "observer":
         observer_id = f"observer_{uuid.uuid4().hex[:8]}"
@@ -714,6 +916,10 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
                         # Append observer_id so operator knows who sent it
                         msg["observer_id"] = observer_id
                         await share["operator_ws"].send_json(msg)
+                elif msg_type == "command":
+                    logger.warning(f"Observer {observer_id} attempted command injection")
+                    await websocket.close(code=4003)
+                    break
         except WebSocketDisconnect:
             pass
         except Exception as e:

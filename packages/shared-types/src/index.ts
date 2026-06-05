@@ -3,6 +3,8 @@ import { TelemetryFrame, PoseLandmark } from './telemetry';
 export * from './telemetry';
 export * from './command';
 export * from './session';
+export * from './online_learning';
+
 
 export interface LandmarkData {
   landmarks: PoseLandmark[];

@@ -7,6 +7,50 @@ import PoseSkeleton from './PoseSkeleton';
 import TwinControls from './TwinControls';
 import { useTelemetryStore } from '../../store/telemetry';
 
+/** DOM overlay for joint angles - outside the WebGL canvas so Playwright can query it. */
+function JointAngleReadouts({ show }: { show: boolean }) {
+  const frame = useTelemetryStore((state) => state.frame);
+  const isTwinFrozen = useTelemetryStore((state) => state.isTwinFrozen);
+  const [frozenAngles, setFrozenAngles] = React.useState<number[] | null>(null);
+  const frameRef = React.useRef(frame);
+
+  React.useEffect(() => {
+    frameRef.current = frame;
+  }, [frame]);
+
+  React.useEffect(() => {
+    if (isTwinFrozen) {
+      if (frameRef.current?.jointAngles) {
+        setFrozenAngles([...frameRef.current.jointAngles]);
+      }
+    } else {
+      setFrozenAngles(null);
+    }
+  }, [isTwinFrozen]);
+
+  if (!show || !frame?.jointAngles) return null;
+
+  const angles = isTwinFrozen && frozenAngles ? frozenAngles : frame.jointAngles;
+
+  return (
+    <div
+      id="joint-angle-dom-readouts"
+      className="absolute top-12 left-3 flex flex-col gap-0.5 pointer-events-none z-20"
+      aria-label="Joint angle readouts"
+    >
+      {angles.map((angleDeg, i) => (
+        <div
+          key={i}
+          id={`joint-readout-${i}`}
+          className="font-mono text-[9px] font-bold bg-black/70 px-1.5 py-0.5 rounded text-accent-cyan border border-accent-cyan/15"
+        >
+          {`J${i}: ${Math.round(angleDeg)}°`}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Preset view definitions
 const CAMERA_PRESETS = {
   Front: {
@@ -37,6 +81,12 @@ function CameraController({
   onTransitionEnd
 }: CameraControllerProps) {
   const { camera } = useThree();
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).camera = camera;
+    }
+  }, [camera]);
   const isAnimating = useRef(false);
   const targetPos = useRef<THREE.Vector3 | null>(null);
   const targetLook = useRef<THREE.Vector3 | null>(null);
@@ -109,6 +159,10 @@ export default function RobotCanvas({
   const activeComparisonSessionId = useTelemetryStore((state) => state.activeComparisonSessionId);
   const comparisonFrames = useTelemetryStore((state) => state.comparisonFrames);
   const hasComparison = !!activeComparisonSessionId && comparisonFrames.length > 0;
+
+  if (typeof window !== 'undefined') {
+    (window as any).__robotCanvasRenderCount = ((window as any).__robotCanvasRenderCount || 0) + 1;
+  }
 
   return (
     <div className={`relative flex-1 rounded-xl overflow-hidden bg-gradient-to-b from-[#10141f] to-[#07080a] aspect-video min-h-[300px] md:min-h-[400px] xl:min-h-[450px] border transition-all duration-300 shadow-2xl ${
@@ -202,6 +256,9 @@ export default function RobotCanvas({
         setShowSkeleton={setShowSkeleton}
         onShareClick={onShareClick}
       />
+
+      {/* DOM joint angle readouts — outside WebGL canvas for Playwright/accessibility */}
+      <JointAngleReadouts show={showReadouts} />
     </div>
   );
 }

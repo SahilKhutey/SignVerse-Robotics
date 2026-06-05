@@ -28,3 +28,10 @@ core/datasets/raw_uploads/
 # Next.js static exports
 out/
 **/out/
+
+# Test caches and temporary artifacts
+.pytest_temp/
+playwright-report/
+**/playwright-report/
+test-results/
+**/test-results/
