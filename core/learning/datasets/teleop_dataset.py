@@ -65,6 +65,7 @@ class TeleopDataset(Dataset):
         split:        str              = "all",
         val_fraction: float            = 0.1,
         seed:         int              = 42,
+        allow_fallback: bool           = True,
     ):
         self.db_path      = Path(db_path)
         self.mode_filter  = mode_filter
@@ -73,6 +74,7 @@ class TeleopDataset(Dataset):
         self.split        = split
         self.val_fraction = val_fraction
         self.seed         = seed
+        self.allow_fallback = allow_fallback
 
         self._ik_solver = InverseKinematicsSolver(_dummy_fk)
         self.samples: List[Tuple[np.ndarray, np.ndarray]] = []
@@ -95,6 +97,16 @@ class TeleopDataset(Dataset):
 
             if "obs_json" in schema:
                 self._load_new_schema(cursor)
+                if len(self.samples) < 32 and self.allow_fallback and self.mode_filter == "retargeted":
+                    log.warning(
+                        "[TeleopDataset] Sparse retargeted samples (%d). Attempting math_fallback bootstrap...",
+                        len(self.samples)
+                    )
+                    self.samples.clear()
+                    orig_filter = self.mode_filter
+                    self.mode_filter = None
+                    self._load_new_schema(cursor)
+                    self.mode_filter = orig_filter
             else:
                 self._load_legacy_schema(cursor)
 
@@ -132,8 +144,8 @@ class TeleopDataset(Dataset):
         )
 
     def _load_new_schema(self, cursor: sqlite3.Cursor):
-        """Load from the EpisodeRecorder schema (obs_json + expert_json)."""
-        query = "SELECT obs_json, expert_json, reward FROM frames WHERE 1=1"
+        """Load from the EpisodeRecorder schema (obs_json + expert_json / action_json)."""
+        query = "SELECT obs_json, expert_json, action_json, reward FROM frames WHERE 1=1"
         params: list = []
 
         if self.mode_filter:
@@ -146,12 +158,16 @@ class TeleopDataset(Dataset):
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        for obs_j, exp_j, reward in rows:
-            if not obs_j or not exp_j:
+        for obs_j, exp_j, act_j, reward in rows:
+            if not obs_j:
+                continue
+            # Fallback to action_json if expert_json is missing/null
+            target_j = exp_j if exp_j else act_j
+            if not target_j:
                 continue
             try:
                 obs    = np.array(json.loads(obs_j),  dtype=np.float32)
-                expert = np.array(json.loads(exp_j),  dtype=np.float32)
+                expert = np.array(json.loads(target_j),  dtype=np.float32)
                 if obs.shape == (63,) and expert.shape == (3,):
                     self.samples.append((obs, expert))
             except (json.JSONDecodeError, ValueError):

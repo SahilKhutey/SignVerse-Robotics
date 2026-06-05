@@ -13,11 +13,12 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.3.0",
+    "@fastify/http-proxy": "^11.5.0",
     "@fastify/rate-limit": "^9.0.0",
     "@fastify/websocket": "^8.2.0",
     "@shared/events": "workspace:*",
-    "@shared/security": "workspace:*",
     "@shared/observability": "workspace:*",
+    "@shared/security": "workspace:*",
     "fastify": "^4.28.1",
     "redis": "^4.7.0"
   },

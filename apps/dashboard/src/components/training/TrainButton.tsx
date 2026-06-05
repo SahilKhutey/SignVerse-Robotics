@@ -22,7 +22,7 @@ export default function TrainButton({
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/sessions', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/sessions`, {
         headers: { 'X-API-Key': 'signverse_local_dev_key' }
       });
       if (!response.ok) throw new Error();
@@ -47,7 +47,7 @@ export default function TrainButton({
   const handleStartRun = async () => {
     setShowConfirm(false);
     try {
-      const response = await fetch('http://localhost:8000/api/training/start', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/training/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -73,7 +73,7 @@ export default function TrainButton({
   const handleHaltRun = async () => {
     try {
       // Simulate halting (could use a direct API if needed, or control endpoint)
-      await fetch('http://localhost:8000/api/training/control', {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/training/control`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -29,7 +29,7 @@ export default function AnalyticsDashboard() {
   useEffect(() => {
     const fetchSessions = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/sessions', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/sessions`, {
           headers: { 'X-API-Key': 'signverse_local_dev_key' }
         });
         if (!response.ok) throw new Error('Offline');
@@ -70,7 +70,7 @@ export default function AnalyticsDashboard() {
         if (!sessionMeta) continue;
 
         try {
-          const response = await fetch(`http://localhost:8000/api/sessions/${id}/frames`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/sessions/${id}/frames`, {
             headers: { 'X-API-Key': 'signverse_local_dev_key' }
           });
           const data = await response.json();

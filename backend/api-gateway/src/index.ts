@@ -4,6 +4,8 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import fastifyWebsocket from "@fastify/websocket";
 import { Writable } from "node:stream";
 import v1Routes from "./routes/v1/index.js";
+import fastifyHttpProxy from "@fastify/http-proxy";
+
 
 // ─── Structured Log Ring Buffer ───────────────────────────────────────────────
 // Captures up to 200 structured log entries emitted by Fastify/Pino.
@@ -92,6 +94,34 @@ await server.register(fastifyRateLimit, {
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 await server.register(fastifyWebsocket);
+
+// ─── Reverse Proxying (FastAPI Backend) ───────────────────────────────────────
+await server.register(fastifyHttpProxy, {
+  upstream: "http://localhost:8000",
+  prefix: "/api",
+  rewritePrefix: "/api",
+});
+
+await server.register(fastifyHttpProxy, {
+  upstream: "http://localhost:8000",
+  prefix: "/ws/learning_events",
+  rewritePrefix: "/ws/learning_events",
+  websocket: true,
+});
+
+await server.register(fastifyHttpProxy, {
+  upstream: "http://localhost:8000",
+  prefix: "/ws/fatigue_events",
+  rewritePrefix: "/ws/fatigue_events",
+  websocket: true,
+});
+
+await server.register(fastifyHttpProxy, {
+  upstream: "http://localhost:8000",
+  prefix: "/ws/rlhf_events",
+  rewritePrefix: "/ws/rlhf_events",
+  websocket: true,
+});
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 server.get("/health", async () => ({
