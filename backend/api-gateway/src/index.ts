@@ -102,27 +102,6 @@ await server.register(fastifyHttpProxy, {
   rewritePrefix: "/api",
 });
 
-await server.register(fastifyHttpProxy, {
-  upstream: "http://localhost:8000",
-  prefix: "/ws/learning_events",
-  rewritePrefix: "/ws/learning_events",
-  websocket: true,
-});
-
-await server.register(fastifyHttpProxy, {
-  upstream: "http://localhost:8000",
-  prefix: "/ws/fatigue_events",
-  rewritePrefix: "/ws/fatigue_events",
-  websocket: true,
-});
-
-await server.register(fastifyHttpProxy, {
-  upstream: "http://localhost:8000",
-  prefix: "/ws/rlhf_events",
-  rewritePrefix: "/ws/rlhf_events",
-  websocket: true,
-});
-
 // ─── Health Check ─────────────────────────────────────────────────────────────
 server.get("/health", async () => ({
   status: "ok",
@@ -149,6 +128,43 @@ function broadcast(clients: Set<any>, message: string) {
     if (client.readyState === 1 /* OPEN */) {
       client.send(message);
     }
+  }
+}
+
+function proxyWebSocket(connection: any, url: string) {
+  try {
+    const targetWs = new globalThis.WebSocket(url);
+
+    targetWs.onmessage = (event: any) => {
+      if (connection.socket.readyState === 1 /* OPEN */) {
+        connection.socket.send(event.data.toString());
+      }
+    };
+
+    targetWs.onerror = (err: any) => {
+      server.log.error(err, `Proxy WebSocket error for ${url}`);
+    };
+
+    targetWs.onclose = () => {
+      connection.socket.close();
+    };
+
+    connection.socket.on("message", (message: any) => {
+      if (targetWs.readyState === 1 /* OPEN */) {
+        targetWs.send(message);
+      }
+    });
+
+    connection.socket.on("close", () => {
+      targetWs.close();
+    });
+
+    connection.socket.on("error", () => {
+      targetWs.close();
+    });
+  } catch (err) {
+    server.log.error(err, `Failed to establish proxy connection to ${url}`);
+    connection.socket.close();
   }
 }
 
@@ -328,6 +344,33 @@ server.get(
       server.log.info("WebSocket client disconnected: ai-inference");
       aiClients.delete(connection.socket);
     });
+  }
+);
+
+// ─── WebSocket: Learning Events Proxy ─────────────────────────────────────────
+server.get(
+  "/ws/learning_events",
+  { websocket: true },
+  (connection, _req) => {
+    proxyWebSocket(connection, "ws://localhost:8000/ws/learning_events");
+  }
+);
+
+// ─── WebSocket: Fatigue Events Proxy ──────────────────────────────────────────
+server.get(
+  "/ws/fatigue_events",
+  { websocket: true },
+  (connection, _req) => {
+    proxyWebSocket(connection, "ws://localhost:8000/ws/fatigue_events");
+  }
+);
+
+// ─── WebSocket: RLHF Events Proxy ─────────────────────────────────────────────
+server.get(
+  "/ws/rlhf_events",
+  { websocket: true },
+  (connection, _req) => {
+    proxyWebSocket(connection, "ws://localhost:8000/ws/rlhf_events");
   }
 );
 
