@@ -2,14 +2,16 @@ import serial
 import time
 import math
 import logging
+import os
 
 class SerialBridge:
-    def __init__(self, port="COM3", baudrate=115200):
+    def __init__(self, port=None, baudrate=None):
         """
         Connects the Python OS Kernel to a physical Microcontroller.
         """
-        self.port = port
-        self.baudrate = baudrate
+        self.port = port or os.getenv("SIGNVERSE_SERIAL_PORT", "COM3")
+        self.baudrate = int(baudrate or os.getenv("SIGNVERSE_SERIAL_BAUD", "115200"))
+        self.simulation_mode = os.getenv("SIGNVERSE_SIMULATION_MODE", "").lower() in {"1", "true", "yes", "on"}
         self.connection = None
         self.is_connected = False
         
@@ -17,6 +19,11 @@ class SerialBridge:
         self.logger.setLevel(logging.INFO)
         
     def connect(self):
+        if self.simulation_mode:
+            self.logger.info("SIGNVERSE_SIMULATION_MODE enabled. Skipping serial hardware connection.")
+            self.is_connected = False
+            return
+
         try:
             self.connection = serial.Serial(self.port, self.baudrate, timeout=0.1)
             self.is_connected = True

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import WebcamFeed from '../components/collector/WebcamFeed';
+import CameraOverlay from '../components/CameraOverlay';
 import SessionTagger from '../components/collector/SessionTagger';
 import RecordingControls from '../components/collector/RecordingControls';
 import SessionList, { SessionItem } from '../components/collector/SessionList';
@@ -72,8 +72,8 @@ export default function CollectorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left Pane: Camera & Active Recorder Session Tagger */}
         <div className="lg:col-span-2 flex flex-col gap-6">
-          {/* Webcam feed */}
-          <WebcamFeed />
+          {/* Ingestion feed & skeleton overlay */}
+          <CameraOverlay />
 
           {/* Active recorder metadata tags configuration */}
           <div className="glass-panel p-5 flex flex-col gap-5">
@@ -107,63 +107,76 @@ export default function CollectorPage() {
           />
 
           {/* Preview selection card */}
-          {selectedSession && (
-            <div className="glass-panel p-5 bg-black/40 border-white/5 flex flex-col gap-2.5">
-              <div className="flex items-center gap-1.5 font-mono text-[9px] text-accent-cyan font-bold">
-                <FileVideo size={12} />
-                <span>EPISODE METRIC PREVIEW</span>
-              </div>
-              <div className="flex flex-col gap-1 font-mono text-[9px] text-text-secondary">
-                <div>ID: <span className="text-text-primary font-bold">{selectedSession.id}</span></div>
-                <div>LABEL: <span className="text-text-primary font-bold">{selectedSession.label}</span></div>
-                <div>FRAMES count: <span className="text-text-primary font-bold">{selectedSession.frame_count}</span></div>
-                <div>DURATION: <span className="text-text-primary font-bold">{selectedSession.duration}s</span></div>
-                <div>DATE: <span className="text-text-primary font-bold">{selectedSession.date}</span></div>
-                <div>EST. SIZE: <span className="text-text-primary font-bold">~{
-                  Math.round((selectedSession.frame_count * 300) / 1024) > 1024 
-                    ? (Math.round((selectedSession.frame_count * 300) / 1024) / 1024).toFixed(1) + ' MB' 
-                    : Math.round((selectedSession.frame_count * 300) / 1024) + ' KB'
-                }</span></div>
-              </div>
-
-              <button
-                onClick={() => {
-                  useTelemetryStore.getState().loadReplaySession(selectedSession.id);
-                  addLog(`📂 Loaded session ${selectedSession.id} into 3D Digital Twin replay environment.`, 'success');
-                }}
-                className="mt-2 w-full py-1.5 rounded bg-accent-cyan/15 hover:bg-accent-cyan/25 border border-accent-cyan/35 hover:border-accent-cyan text-[9px] font-display font-bold tracking-wider text-accent-cyan transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
-              >
-                LOAD INTO 3D TWIN REPLAY
-              </button>
-
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <button
-                  onClick={() => handleExport('hdf5')}
-                  disabled={exportingHdf5 || exportingRlds}
-                  className="py-1.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-display font-bold tracking-wider text-text-primary transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  {exportingHdf5 ? (
-                    <RefreshCw size={10} className="animate-spin text-accent-cyan" />
-                  ) : (
-                    <Download size={10} className="text-accent-cyan" />
-                  )}
-                  EXPORT HDF5
-                </button>
-                <button
-                  onClick={() => handleExport('rlds')}
-                  disabled={exportingHdf5 || exportingRlds}
-                  className="py-1.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-display font-bold tracking-wider text-text-primary transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  {exportingRlds ? (
-                    <RefreshCw size={10} className="animate-spin text-accent-cyan" />
-                  ) : (
-                    <Download size={10} className="text-accent-cyan" />
-                  )}
-                  EXPORT RLDS
-                </button>
-              </div>
+          <div className="glass-panel p-5 bg-black/40 border-white/5 flex flex-col gap-2.5">
+            <div className="flex items-center gap-1.5 font-mono text-[9px] text-accent-cyan font-bold">
+              <FileVideo size={12} />
+              <span>EPISODE METRIC PREVIEW</span>
             </div>
-          )}
+
+            {selectedSession ? (
+              <>
+                <div className="flex flex-col gap-1 font-mono text-[9px] text-text-secondary">
+                  <div>ID: <span className="text-text-primary font-bold">{selectedSession.id}</span></div>
+                  <div>LABEL: <span className="text-text-primary font-bold">{selectedSession.label}</span></div>
+                  <div>FRAMES count: <span className="text-text-primary font-bold">{selectedSession.frame_count}</span></div>
+                  <div>DURATION: <span className="text-text-primary font-bold">{selectedSession.duration}s</span></div>
+                  <div>DATE: <span className="text-text-primary font-bold">{selectedSession.date}</span></div>
+                  <div>EST. SIZE: <span className="text-text-primary font-bold">~{
+                    Math.round((selectedSession.frame_count * 300) / 1024) > 1024 
+                      ? (Math.round((selectedSession.frame_count * 300) / 1024) / 1024).toFixed(1) + ' MB' 
+                      : Math.round((selectedSession.frame_count * 300) / 1024) + ' KB'
+                  }</span></div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    useTelemetryStore.getState().loadReplaySession(selectedSession.id);
+                    addLog(`📂 Loaded session ${selectedSession.id} into 3D Digital Twin replay environment.`, 'success');
+                  }}
+                  className="mt-2 w-full py-1.5 rounded bg-accent-cyan/15 hover:bg-accent-cyan/25 border border-accent-cyan/35 hover:border-accent-cyan text-[9px] font-display font-bold tracking-wider text-accent-cyan transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  LOAD INTO 3D TWIN REPLAY
+                </button>
+
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button
+                    onClick={() => handleExport('hdf5')}
+                    disabled={exportingHdf5 || exportingRlds}
+                    className="py-1.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-display font-bold tracking-wider text-text-primary transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {exportingHdf5 ? (
+                      <RefreshCw size={10} className="animate-spin text-accent-cyan" />
+                    ) : (
+                      <Download size={10} className="text-accent-cyan" />
+                    )}
+                    EXPORT HDF5
+                  </button>
+                  <button
+                    onClick={() => handleExport('rlds')}
+                    disabled={exportingHdf5 || exportingRlds}
+                    className="py-1.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-[9px] font-display font-bold tracking-wider text-text-primary transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {exportingRlds ? (
+                      <RefreshCw size={10} className="animate-spin text-accent-cyan" />
+                    ) : (
+                      <Download size={10} className="text-accent-cyan" />
+                    )}
+                    EXPORT RLDS
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 px-4 text-center border border-dashed border-white/10 rounded-lg">
+                <Download size={18} className="text-text-muted mb-2 animate-pulse" />
+                <span className="font-sans text-[10px] text-text-secondary font-medium">
+                  No Session Selected
+                </span>
+                <p className="font-mono text-[8px] text-text-muted mt-1 leading-normal max-w-[180px]">
+                  Select a session from the list above to preview telemetry and trigger HDF5/RLDS export.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Storage notification */}
           <div className="glass-panel p-5 border-accent-cyan/15 bg-accent-cyan/5 flex flex-col gap-2.5 select-none">

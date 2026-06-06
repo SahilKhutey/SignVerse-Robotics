@@ -65,6 +65,13 @@ class SimRunPayload(BaseModel):
     initial_pose: Optional[List[float]] = None
     real_session_id: Optional[str] = None
 
+
+class SyntheticDatasetPayload(BaseModel):
+    pattern: str = "wave"
+    frame_count: int = 120
+    fps: int = 30
+    save: bool = True
+
 # ── Trajectory / Frame helpers ────────────────────────────────────────────────
 def get_real_frames_helper(session_id: str) -> List[Dict[str, Any]]:
     kernel = gateway_state.kernel
@@ -127,6 +134,57 @@ def get_real_frames_helper(session_id: str) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error querying real session frames: {e}")
         return get_real_frames_helper("session_001")
+
+
+def generate_synthetic_motion_frames(pattern: str, frame_count: int, fps: int) -> List[Dict[str, Any]]:
+    frame_count = max(1, min(frame_count, 2000))
+    fps = max(1, min(fps, 240))
+    now = int(time.time() * 1000)
+    frames: List[Dict[str, Any]] = []
+
+    for i in range(frame_count):
+        t = i / max(1, fps)
+        if pattern == "reach":
+            phase = min(1.0, i / max(1, frame_count - 1))
+            q = [
+                10.0 + phase * 45.0,
+                -20.0 + phase * 35.0,
+                15.0 * math.sin(phase * math.pi),
+                8.0 * math.cos(phase * math.pi),
+                0.0,
+                5.0 * math.sin(phase * math.pi * 2),
+                0.0,
+            ]
+        elif pattern == "grasp":
+            q = [
+                25.0 * math.sin(t * 1.5),
+                30.0 * math.cos(t * 1.1),
+                20.0 * math.sin(t * 2.1),
+                15.0 * math.cos(t * 1.7),
+                40.0 * (0.5 + 0.5 * math.sin(t * 3.0)),
+                35.0 * (0.5 + 0.5 * math.sin(t * 3.0 + 0.6)),
+                30.0 * (0.5 + 0.5 * math.sin(t * 3.0 + 1.2)),
+            ]
+        else:
+            q = [
+                math.sin(t * 3.0) * 45.0,
+                math.cos(t * 2.0) * 30.0,
+                math.sin(t * 4.0) * 20.0,
+                math.cos(t * 2.5) * 25.0,
+                math.sin(t * 5.0) * 15.0,
+                math.cos(t * 3.5) * 10.0,
+                math.sin(t * 1.5) * 5.0,
+            ]
+
+        frames.append({
+            "jointAngles": [float(v) for v in q],
+            "poseLandmarks": [],
+            "aiPrediction": [float(v) for v in q],
+            "confidence": 0.98,
+            "timestampMs": now + int(i * 1000 / fps),
+        })
+
+    return frames
 
 # ── Background Loop Runner ────────────────────────────────────────────────────
 async def run_simulation_job(
@@ -289,6 +347,35 @@ async def run_simulation(payload: SimRunPayload):
     )
     
     return {"status": "started", "jobId": job_id}
+
+
+@router.post("/synthetic")
+async def generate_synthetic_dataset(payload: SyntheticDatasetPayload):
+    frames = generate_synthetic_motion_frames(payload.pattern, payload.frame_count, payload.fps)
+    dataset_id = f"synthetic_{payload.pattern}_{int(time.time())}"
+    file_path = None
+
+    if payload.save:
+        output_dir = Path("core/datasets/processed")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        file_path = output_dir / f"{dataset_id}.json"
+        file_path.write_text(json.dumps({
+            "dataset_id": dataset_id,
+            "source": "simulation_synthetic",
+            "pattern": payload.pattern,
+            "fps": payload.fps,
+            "frames": frames,
+        }, indent=2), encoding="utf-8")
+
+    return {
+        "status": "success",
+        "dataset_id": dataset_id,
+        "pattern": payload.pattern,
+        "fps": payload.fps,
+        "frame_count": len(frames),
+        "file_path": str(file_path) if file_path else None,
+        "frames": frames,
+    }
 
 @router.get("/episodes")
 async def get_episodes():

@@ -141,7 +141,7 @@ export default function AppShell() {
     { to: '/training', icon: Brain, label: 'Policy Training' },
     { to: '/online-learning', icon: Cpu, label: 'Online Learning' },
     { to: '/rlhf', icon: Heart, label: 'RLHF Studio' },
-    { to: '/simulation', icon: FlaskConical, label: 'Sim-to-Real' },
+    { to: '/simulation', icon: FlaskConical, label: 'Simulations' },
     { to: '/system', icon: Settings, label: 'System Health' },
     { to: '/performance', icon: Zap, label: 'Performance' },
   ];

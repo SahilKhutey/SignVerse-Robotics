@@ -99,3 +99,18 @@ def test_run_simulation_job():
     frames_data = frames_response.json()
     assert frames_data["status"] == "success"
     assert len(frames_data["frames"]) > 0
+
+
+def test_generate_synthetic_dataset():
+    response = client.post(
+        "/api/sim/synthetic",
+        headers={"X-API-Key": API_KEY},
+        json={"pattern": "wave", "frame_count": 24, "fps": 12, "save": False},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["pattern"] == "wave"
+    assert data["frame_count"] == 24
+    assert len(data["frames"]) == 24
+    assert len(data["frames"][0]["jointAngles"]) == 7

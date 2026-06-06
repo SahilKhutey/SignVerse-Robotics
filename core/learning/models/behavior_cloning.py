@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class BehaviorCloningMLP(nn.Module):
-    def __init__(self, input_dim=63, hidden_dim=128, output_dim=3):
+    def __init__(self, input_dim=63, hidden_dim=256, output_dim=3):
         """
         A lightweight Multi-Layer Perceptron for Behavior Cloning.
         Maps 63-dimensional human hand landmarks (21 points * 3D) 

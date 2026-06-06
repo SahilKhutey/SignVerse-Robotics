@@ -1,7 +1,22 @@
 import pytest, torch, asyncio
 import random
 import time
+import re
+import shutil
 from pathlib import Path
+
+_TEMP_ROOT = Path(__file__).resolve().parents[1] / ".pytest_temp"
+
+
+@pytest.fixture
+def tmp_path(request):
+    """Workspace-local tmp_path replacement for Windows environments with locked AppData temp dirs."""
+    node_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", request.node.nodeid)
+    path = _TEMP_ROOT / node_name
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 @pytest.fixture
 def bc_model():

@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore } from '../store/telemetry';
 import { useLandmarksStore } from '../store/landmarks';
 import { useNotificationsStore } from '../store/notifications';
-import { Camera, Zap, Youtube, Upload, FileVideo, FileImage, RefreshCw, Eye, EyeOff, CameraOff } from 'lucide-react';
+import { Camera, Zap, Youtube, Upload, FileVideo, FileImage, RefreshCw, Eye, EyeOff, CameraOff, AlertTriangle, Coffee } from 'lucide-react';
 import { PoseLandmark } from '@signverse/shared-types';
 import { VITE_API_URL } from '../lib/env';
+import { useFatigueStore } from '../store/fatigue';
+import FatigueScoreHUD from './collector/FatigueScoreHUD';
 
 type SourceType = 'webcam' | 'youtube' | 'video' | 'image';
 
@@ -14,6 +16,16 @@ export default function CameraOverlay() {
   
   const wsState = useTelemetryStore((state) => state.wsState);
   const addLog = useNotificationsStore((state) => state.addLog);
+
+  // Fatigue monitoring state
+  const { 
+    connectFatigueStream, 
+    disconnectFatigueStream, 
+    state: fatigueState, 
+    breakTimerActive, 
+    breakTimeRemaining,
+    resumeRecordingSession
+  } = useFatigueStore();
 
   // Source selection state
   const [source, setSource] = useState<SourceType>('webcam');
@@ -30,7 +42,6 @@ export default function CameraOverlay() {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Webcam stream lifecycle
   useEffect(() => {
     if (source === 'webcam' && webcamActive) {
       startWebcam();
@@ -39,6 +50,18 @@ export default function CameraOverlay() {
     }
     return () => stopWebcam();
   }, [source, webcamActive]);
+
+  // Connect/disconnect fatigue events stream in sync with active webcam
+  useEffect(() => {
+    if (source === 'webcam' && webcamActive) {
+      connectFatigueStream();
+    } else {
+      disconnectFatigueStream();
+    }
+    return () => {
+      disconnectFatigueStream();
+    };
+  }, [source, webcamActive, connectFatigueStream, disconnectFatigueStream]);
 
   const startWebcam = async () => {
     setWebcamError(null);
@@ -76,10 +99,25 @@ export default function CameraOverlay() {
     
     const draw = () => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
       
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+
+      // Sync canvas dimensions to client bounds
+      const parent = canvas.parentElement;
+      if (parent) {
+        if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
+          canvas.width = parent.clientWidth;
+          canvas.height = parent.clientHeight;
+        }
+      }
 
       const width = canvas.width;
       const height = canvas.height;
@@ -123,42 +161,89 @@ export default function CameraOverlay() {
       }
 
       if (landmarksToDraw.length > 0) {
-        // Draw bones
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(142, 45, 226, 0.6)'; // Violet glow
-        
-        const drawBone = (p1Idx: number, p2Idx: number) => {
-          const p1 = landmarksToDraw[p1Idx];
-          const p2 = landmarksToDraw[p2Idx];
-          if (p1 && p2) {
-            ctx.beginPath();
-            ctx.moveTo(p1.x * width, p1.y * height);
-            ctx.lineTo(p2.x * width, p2.y * height);
-            ctx.stroke();
+        ctx.lineCap = 'round';
+
+        const isMediaPipe = landmarksToDraw.length === 33;
+
+        if (isMediaPipe) {
+          // Draw bones
+          const CONNECTIONS = [
+            [11, 12], // Shoulder line
+            [11, 13], [13, 15], // Left arm
+            [12, 14], [14, 16], // Right arm
+            [15, 17], [15, 19], [15, 21], // Left fingers
+            [16, 18], [16, 20], [16, 22], // Right fingers
+            [11, 23], [12, 24], [23, 24], // Torso outline
+          ];
+
+          CONNECTIONS.forEach(([a, b]) => {
+            const lA = landmarksToDraw[a];
+            const lB = landmarksToDraw[b];
+            if (lA && lB && lA.visibility > 0.5 && lB.visibility > 0.5) {
+              const xA = (1 - lA.x) * width;
+              const yA = lA.y * height;
+              const xB = (1 - lB.x) * width;
+              const yB = lB.y * height;
+
+              ctx.beginPath();
+              ctx.moveTo(xA, yA);
+              ctx.lineTo(xB, yB);
+              ctx.stroke();
+            }
+          });
+
+          // Draw joints
+          landmarksToDraw.forEach((pt: PoseLandmark, index: number) => {
+            if (pt.visibility > 0.5) {
+              const x = (1 - pt.x) * width;
+              const y = pt.y * height;
+
+              ctx.beginPath();
+              ctx.arc(x, y, index === 0 ? 6 : 4, 0, 2 * Math.PI);
+              ctx.fillStyle = index === 0 ? 'var(--color-accent-red)' : 'var(--color-accent-cyan)';
+              ctx.shadowColor = 'var(--color-accent-cyan)';
+              ctx.shadowBlur = 8;
+              ctx.fill();
+              ctx.shadowBlur = 0;
+            }
+          });
+        } else {
+          // Mock 7-point landmarks
+          const drawBone = (p1Idx: number, p2Idx: number) => {
+            const p1 = landmarksToDraw[p1Idx];
+            const p2 = landmarksToDraw[p2Idx];
+            if (p1 && p2) {
+              ctx.beginPath();
+              ctx.moveTo(p1.x * width, p1.y * height);
+              ctx.lineTo(p2.x * width, p2.y * height);
+              ctx.stroke();
+            }
+          };
+
+          if (landmarksToDraw.length >= 7) {
+            drawBone(1, 2);
+            drawBone(1, 3);
+            drawBone(3, 5);
+            drawBone(2, 4);
+            drawBone(4, 6);
           }
-        };
 
-        if (landmarksToDraw.length >= 7) {
-          drawBone(1, 2);
-          drawBone(1, 3);
-          drawBone(3, 5);
-          drawBone(2, 4);
-          drawBone(4, 6);
+          // Draw joints
+          landmarksToDraw.forEach((pt: PoseLandmark, index: number) => {
+            const x = pt.x * width;
+            const y = pt.y * height;
+
+            ctx.beginPath();
+            ctx.arc(x, y, index === 0 ? 6 : 4, 0, 2 * Math.PI);
+            ctx.fillStyle = index === 0 ? 'var(--color-accent-red)' : 'var(--color-accent-cyan)';
+            ctx.shadowColor = 'var(--color-accent-cyan)';
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          });
         }
-
-        // Draw joints
-        landmarksToDraw.forEach((pt: PoseLandmark, index: number) => {
-          const x = pt.x * width;
-          const y = pt.y * height;
-          
-          ctx.beginPath();
-          ctx.arc(x, y, index === 0 ? 6 : 4, 0, 2 * Math.PI);
-          ctx.fillStyle = index === 0 ? 'var(--color-accent-red)' : 'var(--color-accent-cyan)';
-          ctx.shadowColor = 'var(--color-accent-cyan)';
-          ctx.shadowBlur = 8;
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        });
       }
 
       animationFrameId = requestAnimationFrame(draw);
@@ -327,6 +412,58 @@ export default function CameraOverlay() {
               height={300}
               className="absolute inset-0 w-full h-full z-[2] pointer-events-none"
             />
+
+            {/* Biometric Fatigue HUD Ring Overlay */}
+            {webcamActive && !webcamError && (
+              <FatigueScoreHUD />
+            )}
+
+            {/* Caution state amber tint overlay */}
+            {webcamActive && !webcamError && fatigueState === 'caution' && (
+              <div className="pointer-events-none absolute inset-0 bg-amber-500/10 border-2 border-amber-500/30 transition-all duration-300 z-10 animate-in fade-in" />
+            )}
+
+            {/* Caution state banner */}
+            {webcamActive && !webcamError && fatigueState === 'caution' && (
+              <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/20 backdrop-blur-sm border border-amber-500/40 text-amber-400 font-mono text-[9px] font-bold tracking-wider animate-pulse select-none">
+                <AlertTriangle size={12} />
+                <span>Signs of fatigue detected — take a break soon</span>
+              </div>
+            )}
+
+            {/* Fatigued break prompt modal overlay */}
+            {webcamActive && !webcamError && breakTimerActive && (
+              <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center gap-5 p-6 z-30 select-none animate-in fade-in duration-300">
+                <div className="h-16 w-16 rounded-full bg-accent-red/10 border border-accent-red/35 flex items-center justify-center text-accent-red shadow-[0_0_20px_rgba(255,51,102,0.2)]">
+                  <Coffee size={28} />
+                </div>
+                
+                <div className="flex flex-col gap-1 text-center max-w-sm">
+                  <span className="font-display text-sm font-black tracking-widest text-text-primary uppercase">
+                    Operator Fatigue Detected
+                  </span>
+                  <p className="text-[10px] text-text-secondary font-mono leading-relaxed max-w-xs mx-auto">
+                    Active recording has been automatically paused. Please take a 5-minute break to rest. Your session data up to this point is saved.
+                  </p>
+                </div>
+
+                {/* Countdown Clock */}
+                <div className="flex flex-col items-center justify-center bg-white/3 border border-white/5 px-6 py-4 rounded-xl font-mono shadow-inner min-w-[140px]">
+                  <span className="text-[8px] text-text-muted uppercase tracking-widest mb-1">Break Time Remaining</span>
+                  <span className="text-xl font-black text-accent-cyan tracking-wider">
+                    {Math.floor(breakTimeRemaining / 60)}:{String(breakTimeRemaining % 60).padStart(2, '0')}
+                  </span>
+                </div>
+
+                {/* Action buttons */}
+                <button
+                  onClick={() => resumeRecordingSession()}
+                  className="px-5 py-2.5 rounded-lg bg-accent-cyan hover:bg-cyan-400 text-black font-display text-[10px] font-bold tracking-widest uppercase transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.2)] animate-pulse"
+                >
+                  <span>Resume Teleoperation</span>
+                </button>
+              </div>
+            )}
           </>
         )}
 

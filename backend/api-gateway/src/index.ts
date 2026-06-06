@@ -217,6 +217,14 @@ function connectToPythonBackend() {
             gesture: gesture
           });
           broadcast(aiClients, aiMsg);
+
+          // Broadcast landmarks if present
+          if (payload.pose_landmarks) {
+            broadcast(telemetryClients, JSON.stringify({
+              type: "landmark",
+              data: { landmarks: payload.pose_landmarks }
+            }));
+          }
         }
       } catch (err) {
         server.log.error(err, "Failed to parse Python kernel telemetry message");

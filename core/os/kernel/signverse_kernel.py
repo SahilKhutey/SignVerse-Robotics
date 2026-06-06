@@ -5,6 +5,7 @@ import queue
 import time
 import sys
 import os
+from pathlib import Path
 
 # Dynamic path injection for robotics/edge-runtime state
 kernel_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +27,32 @@ from core.learning.imitation.training_orchestrator import TrainingOrchestrator
 from core.os.utils.logger import setup_logger
 
 logger = setup_logger("SignVerseKernel")
+
+def _checkpoint_candidates() -> list[Path]:
+    configured = os.getenv("SIGNVERSE_MODEL_PATH")
+    candidates = []
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend([
+        Path("models/checkpoints/bc_model.pth"),
+        Path("models/checkpoints/policy_latest.pth"),
+        Path("models/checkpoints/policy_best.pth"),
+        Path("core/learning/models/policy_latest.pth"),
+    ])
+    return candidates
+
+def _load_policy_checkpoint(policy: torch.nn.Module) -> Path | None:
+    for model_path in _checkpoint_candidates():
+        if not model_path.exists():
+            continue
+        try:
+            checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+            state_dict = checkpoint.get("model", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+            policy.load_state_dict(state_dict)
+            return model_path
+        except Exception as exc:
+            logger.warning("Failed to load AI checkpoint %s: %s", model_path, exc)
+    return None
 
 def _perception_worker(frame_queue, state_queue):
     """Background process for running MediaPipe (GIL isolated).
@@ -97,19 +124,17 @@ class SignVerseKernel:
         self.fatigue_classifier = FatigueClassifier()
         
         # 2. AI Policy Layer (Behavior Cloning)
-        import os
         self.use_ai = False
         self.policy = BehaviorCloningMLP()
-        model_path = "models/checkpoints/bc_model.pth"
-        if os.path.exists(model_path):
-            try:
-                self.policy.load_state_dict(torch.load(model_path, map_location='cpu'))
-                self.use_ai = True
-                logger.info("AI Inference Mode: ENABLED")
-            except Exception as e:
-                logger.error(f"Failed to load AI checkpoint: {e}")
+        loaded_checkpoint = _load_policy_checkpoint(self.policy)
+        if loaded_checkpoint:
+            self.use_ai = True
+            logger.info("AI Inference Mode: ENABLED (%s)", loaded_checkpoint)
         else:
-            logger.warning("AI Inference Mode: DISABLED (No checkpoint found). Falling back to Mathematical IK.")
+            logger.warning(
+                "AI Inference Mode: DISABLED (No checkpoint found). "
+                "Set SIGNVERSE_MODEL_PATH or place policy_latest.pth in models/checkpoints."
+            )
             
         self.policy.eval()
         
@@ -405,4 +430,3 @@ class SignVerseKernel:
                 q.cancel_join_thread()
             except Exception:
                 pass
-

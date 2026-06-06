@@ -610,10 +610,22 @@ async def websocket_telemetry(websocket: WebSocket):
 
     keepalive_task = asyncio.create_task(_keepalive())
 
+    def _enqueue_control(frame: dict):
+        try:
+            client_q.put_nowait(frame)
+        except asyncio.QueueFull:
+            try:
+                client_q.get_nowait()
+            except Exception:
+                pass
+            try:
+                client_q.put_nowait(frame)
+            except Exception:
+                pass
+
     # ── Incoming message handler ──────────────────────────────────────────────
     async def _receive_loop():
         """Handle client→server messages (sync handshake, PONG, commands)."""
-        kernel_ = app.state.kernel
         while True:
             try:
                 raw = await websocket.receive_text()
@@ -626,19 +638,26 @@ async def websocket_telemetry(websocket: WebSocket):
                 action = msg.get("action") or msg.get("type")
 
                 if action == "sync":
+                    kernel_ = getattr(app.state, "kernel", None)
+                    if kernel_ is None:
+                        _enqueue_control({
+                            "type": "SYNC_RESPONSE",
+                            "payload": {"status": "kernel_offline"},
+                        })
+                        continue
                     last_ts = msg.get("last_received_timestamp", 0.0)
                     sync_res = kernel_.reconciler.reconcile(last_ts)
-                    await websocket.send_json({"type": "SYNC_RESPONSE", "payload": sync_res})
+                    _enqueue_control({"type": "SYNC_RESPONSE", "payload": sync_res})
 
                 elif action == "PING" or action == "ping":
                     sent_ts = msg.get("ts", 0)
-                    await websocket.send_json({"type": "PONG", "ts": sent_ts})
+                    _enqueue_control({"type": "PONG", "ts": sent_ts})
 
                 elif action == "PONG":
                     # RTT measurement — client echoes back ts from our PING
                     sent_ts = msg.get("ts", 0)
                     rtt_ms  = round((time.time() - sent_ts) * 1000)
-                    await websocket.send_json({"type": "RTT", "rtt_ms": rtt_ms})
+                    _enqueue_control({"type": "RTT", "rtt_ms": rtt_ms})
 
 
             except WebSocketDisconnect:
@@ -864,13 +883,13 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
                 observer_id = msg.get("observer_id")
 
                 if observer_id and observer_id in share["observers"]:
-                    obs_ws = share["observers"][observer_id]
+                    obs_entry = share["observers"][observer_id]
                     if msg_type in ("offer", "ice_candidate"):
                         # Forward WebRTC signaling to observer
-                        await obs_ws.send_json(msg)
+                        await obs_entry["queue"].put(msg)
                     elif msg_type == "telemetry_relay":
                         # Forward telemetry fallback directly to observer
-                        await obs_ws.send_json({
+                        await obs_entry["queue"].put({
                             "type": "telemetry",
                             "data": msg.get("frame")
                         })
@@ -882,16 +901,17 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
             share["operator_ws"] = None
             logger.info(f"Operator disconnected from share live stream for token {token[:8]}")
             # Close all observer WebSockets when operator disconnects
-            for obs_ws in list(share["observers"].values()):
+            for obs_entry in list(share["observers"].values()):
                 try:
-                    await obs_ws.close()
+                    await obs_entry["ws"].close()
                 except Exception:
                     pass
 
 
     elif role == "observer":
         observer_id = f"observer_{uuid.uuid4().hex[:8]}"
-        share["observers"][observer_id] = websocket
+        outbound_q: asyncio.Queue = asyncio.Queue(maxsize=32)
+        share["observers"][observer_id] = {"ws": websocket, "queue": outbound_q}
         logger.info(f"Observer {observer_id} connected to token {token[:8]}. Total observers: {len(share['observers'])}")
 
         # Notify operator that a new observer connected
@@ -903,6 +923,13 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
                 })
             except Exception:
                 pass
+
+        async def _observer_sender():
+            while True:
+                msg = await outbound_q.get()
+                await websocket.send_json(msg)
+
+        sender_task = asyncio.create_task(_observer_sender())
 
         try:
             while True:
@@ -925,6 +952,7 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
         except Exception as e:
             logger.warning(f"Observer socket error for observer {observer_id}: {e}")
         finally:
+            sender_task.cancel()
             if observer_id in share["observers"]:
                 del share["observers"][observer_id]
             logger.info(f"Observer {observer_id} disconnected. Total observers: {len(share['observers'])}")
@@ -938,4 +966,3 @@ async def websocket_observe(websocket: WebSocket, token: str, role: str):
                     })
                 except Exception:
                     pass
-
