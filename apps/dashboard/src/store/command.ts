@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { useNotificationsStore } from './notifications';
 import { useTelemetryStore } from './telemetry';
 import { usePerformanceStore } from './performance';
+import { useToastStore } from './toast';
 import { VITE_API_URL } from '../lib/env';
 
 export interface ChatMessage {
@@ -220,12 +221,10 @@ export const useCommandStore = create<CommandState>((set, get) => ({
       }
     } catch (err: any) {
       if (err.message.includes('HTTP 500') || err.message.includes('500')) {
-        import('./toast').then(({ useToastStore }) => {
-          useToastStore.getState().addToast({
-            message: 'Internal Server Error (500): Failed to parse command.',
-            type: 'error',
-            code: 'HTTP_500'
-          });
+        useToastStore.getState().addToast({
+          message: 'Internal Server Error (500): Failed to parse command.',
+          type: 'error',
+          code: 'HTTP_500'
         });
         set((state) => {
           const updated = state.messages.map((m) => {
@@ -341,4 +340,3 @@ export const useCommandStore = create<CommandState>((set, get) => ({
 if (typeof window !== 'undefined') {
   (window as any).useCommandStore = useCommandStore;
 }
-

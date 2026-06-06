@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { VITE_API_URL } from '../lib/env';
 import { useNotificationsStore } from './notifications';
+import { useTelemetryStore } from './telemetry';
 
 export interface FatigueSignals {
   ear: number;
@@ -71,16 +72,14 @@ export const useFatigueStore = create<FatigueState>((set, get) => {
               });
             } else if (data.type === 'PAUSE_RECORDING') {
               // Pause the recording in telemetry store
-              import('./telemetry').then(({ useTelemetryStore }) => {
-                const telemetryState = useTelemetryStore.getState();
-                if (telemetryState.isRecording) {
-                  useTelemetryStore.setState({ isRecording: false });
-                  useNotificationsStore.getState().addLog(
+              const telemetryState = useTelemetryStore.getState();
+              if (telemetryState.isRecording) {
+                useTelemetryStore.setState({ isRecording: false });
+                useNotificationsStore.getState().addLog(
                     '⚠️ FATIGUE DETECTED: Teleoperation recording paused automatically. Please take a break.', 
                     'error'
-                  );
-                }
-              });
+                );
+              }
               // Activate break timer
               get().startBreakTimer();
             }
@@ -149,9 +148,7 @@ export const useFatigueStore = create<FatigueState>((set, get) => {
         });
         if (response.ok) {
           // Restart recording state in telemetry store
-          import('./telemetry').then(({ useTelemetryStore }) => {
-            useTelemetryStore.setState({ isRecording: true });
-          });
+          useTelemetryStore.setState({ isRecording: true });
           get().resetBreakTimer();
           set({ state: 'ok', fatigueScore: 0.0 });
         }

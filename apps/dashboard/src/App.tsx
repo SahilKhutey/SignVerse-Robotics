@@ -4,9 +4,9 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import AppShell from './components/AppShell';
 
-import TwinPage from './pages/TwinPage';
+const TwinPage = React.lazy(() => import('./pages/TwinPage'));
 const TelemetryPage = React.lazy(() => import('./pages/TelemetryPage'));
-import CommandPage from './pages/CommandPage';
+const CommandPage = React.lazy(() => import('./pages/CommandPage'));
 const CollectorPage = React.lazy(() => import('./pages/CollectorPage'));
 const TrainingPage = React.lazy(() => import('./pages/TrainingPage'));
 const OnlineLearningPage = React.lazy(() => import('./pages/OnlineLearningPage'));
@@ -14,7 +14,7 @@ const SystemPage = React.lazy(() => import('./pages/SystemPage'));
 const PerformancePage = React.lazy(() => import('./pages/PerformancePage'));
 const SimulationPage = React.lazy(() => import('./pages/SimulationPage'));
 const RLHFPage = React.lazy(() => import('./pages/RLHFPage'));
-import ObserverPage from './pages/ObserverPage';
+const ObserverPage = React.lazy(() => import('./pages/ObserverPage'));
 
 const LoadingFallback = () => (
   <div className="h-full w-full flex flex-col items-center justify-center bg-[#07080a] gap-3">
