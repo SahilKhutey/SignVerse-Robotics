@@ -5,6 +5,41 @@ import React from 'react';
 import.meta.env.VITE_API_URL = 'http://localhost:8000';
 import.meta.env.VITE_WS_URL = 'ws://localhost:8000';
 
+const originalConsoleError = console.error.bind(console);
+const originalConsoleWarn = console.warn.bind(console);
+
+const suppressedReactThreeMessages = [
+  'is using incorrect casing',
+  'is unrecognized in this browser',
+  'React does not recognize the `%s` prop',
+  'React does not recognize the `castShadow` prop',
+  'React does not recognize the `receiveShadow` prop',
+  'React does not recognize the `emissiveIntensity` prop',
+  'React does not recognize the `enableDamping` prop',
+  'React does not recognize the `dampingFactor` prop',
+  'React does not recognize the `maxPolarAngle` prop',
+  'React does not recognize the `minDistance` prop',
+  'React does not recognize the `maxDistance` prop',
+  'Received `%s` for a non-boolean attribute `%s`',
+  'Function components cannot be given refs',
+  'Received `true` for a non-boolean attribute `shadows`',
+];
+
+const shouldSuppressReactThreeWarning = (args: unknown[]) => {
+  const message = String(args[0] ?? '');
+  return suppressedReactThreeMessages.some((pattern) => message.includes(pattern));
+};
+
+console.error = (...args: unknown[]) => {
+  if (shouldSuppressReactThreeWarning(args)) return;
+  originalConsoleError(...args);
+};
+
+console.warn = (...args: unknown[]) => {
+  if (shouldSuppressReactThreeWarning(args)) return;
+  originalConsoleWarn(...args);
+};
+
 // Mock recharts
 vi.mock('recharts', () => {
   return {
@@ -160,7 +195,8 @@ vi.mock('three', () => {
 // Mock react-three-fiber
 vi.mock('@react-three/fiber', () => {
   return {
-    Canvas: ({ children, ...props }: any) => React.createElement('div', { 'data-testid': 'mock-canvas', ...props }, children),
+    Canvas: ({ children, role, 'aria-label': ariaLabel }: any) =>
+      React.createElement('div', { 'data-testid': 'mock-canvas', role, 'aria-label': ariaLabel }, children),
     useFrame: (callback: any) => {
       // Store callbacks globally for lerp test triggering
       (globalThis as any).__useFrameCallbacks = (globalThis as any).__useFrameCallbacks || [];
@@ -176,8 +212,12 @@ vi.mock('@react-three/fiber', () => {
 
 // Mock react-three-drei
 vi.mock('@react-three/drei', () => {
+  const OrbitControls = React.forwardRef<HTMLDivElement, any>(({ children }: any, ref) =>
+    React.createElement('div', { ref, 'data-testid': 'mock-orbit-controls' }, children)
+  );
+
   return {
-    OrbitControls: ({ children, ...props }: any) => React.createElement('div', { 'data-testid': 'mock-orbit-controls', ...props }, children),
+    OrbitControls,
     Grid: () => null,
     Environment: () => null,
     Html: ({ children }: any) => React.createElement('div', { 'data-testid': 'mock-html' }, children),

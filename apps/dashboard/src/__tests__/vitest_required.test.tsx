@@ -368,7 +368,9 @@ describe('Vitest Required Suite', () => {
     const ws1 = wsInstances[0];
     
     // Trigger close 1
-    ws1.onclose();
+    act(() => {
+      ws1.onclose();
+    });
     
     // Reconnect runs after backoff delay (starts at 1000ms)
     act(() => {
@@ -377,7 +379,9 @@ describe('Vitest Required Suite', () => {
     expect(wsInstances.length).toBe(2);
     
     const ws2 = wsInstances[1];
-    ws2.onclose();
+    act(() => {
+      ws2.onclose();
+    });
     
     // Reconnect 2 runs after 2000ms
     act(() => {
@@ -602,10 +606,13 @@ describe('Vitest Required Suite', () => {
     expect(banner).toBeDefined();
   });
 
-  it('SkeletonLoader_renders_before_data_arrives', () => {
+  it('SkeletonLoader_renders_before_data_arrives', async () => {
     useTelemetryStore.setState({ frame: null });
     const wrapper = createWrapper();
-    render(<TelemetryPage />, { wrapper });
+    await act(async () => {
+      render(<TelemetryPage />, { wrapper });
+      await Promise.resolve();
+    });
     
     const skeletons = screen.getAllByTestId('skeleton');
     expect(skeletons).toHaveLength(4);
@@ -616,15 +623,20 @@ describe('Vitest Required Suite', () => {
   // ────────────────────────────────────────────────────────────────────────────
 
   it('ErrorBoundary_catches_RobotCanvas_crash', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const BadComponent = () => {
       throw new Error('RobotCanvas crash');
     };
-    render(
-      <ErrorBoundary>
-        <BadComponent />
-      </ErrorBoundary>
-    );
-    expect(screen.getByText(/Reload/)).toBeDefined();
+    try {
+      render(
+        <ErrorBoundary>
+          <BadComponent />
+        </ErrorBoundary>
+      );
+      expect(screen.getByText(/Reload/)).toBeDefined();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('APIError_toast_shown_on_command_failure', async () => {
